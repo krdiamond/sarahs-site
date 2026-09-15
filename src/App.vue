@@ -60,11 +60,8 @@ const work = [
   >
     <!-- Left: gray, split horizontally -->
     <div class="flex h-full w-1/2 flex-col bg-neutral-300">
-      <h1 class="shrink-0 px-4 pt-4 pb-3 text-left text-[34px] leading-tight">
-        Sarah Fensom
-      </h1>
       <section
-        class="flex min-h-0 flex-[2] flex-col overflow-hidden border-b border-black px-4 pb-4"
+        class="flex min-h-0 flex-[2] flex-col overflow-hidden border-b border-black p-4"
       >
         <h2 class="mb-3 shrink-0">Events</h2>
         <ul class="min-h-0 flex-1 space-y-1 overflow-y-auto">
@@ -98,8 +95,8 @@ const work = [
     </div>
 
     <!-- Right: white -->
-    <div class="h-full w-1/2 overflow-hidden bg-white p-4 text-right">
-      <p class="text-[12px] leading-normal">
+    <div class="relative flex h-full w-1/2 flex-col overflow-hidden bg-white p-4">
+      <p class="text-right text-[12px] leading-normal">
         Sarah Fensom is a film and arts journalist based in Los Angeles. With
         over 15 years of experience as a writer, she has contributed to the Los
         Angeles Times, American Cinematographer, BOMB, Sight and Sound, LA
@@ -107,6 +104,11 @@ const work = [
         the co-writer and star of Lindsay Denniberg’s forthcoming film, Killer
         Makeover and a uniquely glamorous person.
       </p>
+      <h1
+        class="mt-auto self-end text-right text-[34px] leading-tight"
+      >
+        Sarah Fensom
+      </h1>
     </div>
   </div>
 </template>
