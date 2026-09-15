@@ -64,7 +64,12 @@ const work = [
         <h1 class="mb-3 shrink-0">Events</h1>
         <ul class="min-h-0 flex-1 space-y-1 overflow-y-auto">
           <li v-for="item in events" :key="item.date + item.title">
-            <a href="#" class="text-[#0000EE] underline">
+            <a
+              href="#"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="text-[#0000EE] underline"
+            >
               {{ item.date }}-{{ item.title }} <i>for {{ item.publication }}</i>
             </a>
           </li>
@@ -74,7 +79,12 @@ const work = [
         <h1 class="mb-3 shrink-0">Work</h1>
         <ul class="min-h-0 flex-1 space-y-1 overflow-y-auto">
           <li v-for="item in work" :key="item.date + item.title">
-            <a href="#" class="text-[#0000EE] underline">
+            <a
+              href="#"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="text-[#0000EE] underline"
+            >
               {{ item.date }}-{{ item.title }} <i>for {{ item.publication }}</i>
             </a>
           </li>
@@ -83,6 +93,17 @@ const work = [
     </div>
 
     <!-- Right: white -->
-    <div class="h-full w-1/2 bg-white" />
+    <div class="h-full w-1/2 overflow-hidden bg-white p-4 text-right">
+      <h1 class="text-[34px] leading-tight">Sarah Fensom</h1>
+      <p class="mt-3 text-[12px] leading-normal">
+        Sarah Fensom is a film and arts journalist based in Los Angeles. With
+        over 15 years of experience as a writer, she has contributed to the Los
+        Angeles Times, American Cinematographer, BOMB, Sight and Sound, LA
+        Review of Books, Film Comment, and a host of other publications. She is
+        the co-writer and star of Lindsay Denniberg’s forthcoming film, Killer
+        Makeover and a uniquely glamorous person. She is married to writer and
+        filmmaker Chris Shields.
+      </p>
+    </div>
   </div>
 </template>
