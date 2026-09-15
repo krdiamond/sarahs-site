@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 
 const events = [
   { date: '09.01.2026', title: 'Opening Reception', publication: 'Artforum' },
@@ -63,6 +63,109 @@ const showAbout = () => hovering.value || pinned.value
 const toggleAbout = () => {
   pinned.value = !pinned.value
 }
+
+const asset = (file) => `${import.meta.env.BASE_URL}${file}`
+
+/** Icons on the white panel. Add more entries here later. */
+const helpers = ref([
+  {
+    id: 'ms-piggy',
+    src: asset('ms-piggy.png'),
+    alt: 'Miss Piggy',
+    width: 160,
+    height: 211,
+    x: 0,
+    y: 0,
+  },
+])
+
+const stageRef = ref(null)
+const drag = ref(null)
+let zCounter = 1
+
+const clamp = (value, min, max) => Math.min(Math.max(value, min), max)
+
+const placeHelper = (helper, x, y) => {
+  const stage = stageRef.value
+  if (!stage) return
+  const maxX = Math.max(0, stage.clientWidth - helper.width)
+  const maxY = Math.max(0, stage.clientHeight - helper.height)
+  helper.x = clamp(x, 0, maxX)
+  helper.y = clamp(y, 0, maxY)
+}
+
+const centerHelpers = () => {
+  const stage = stageRef.value
+  if (!stage) return
+  for (const helper of helpers.value) {
+    placeHelper(
+      helper,
+      (stage.clientWidth - helper.width) / 2,
+      (stage.clientHeight - helper.height) / 2,
+    )
+  }
+}
+
+const clampHelpersToStage = () => {
+  for (const helper of helpers.value) {
+    placeHelper(helper, helper.x, helper.y)
+  }
+}
+
+const helperStyle = (helper) => ({
+  width: `${helper.width}px`,
+  transform: `translate3d(${helper.x}px, ${helper.y}px, 0)`,
+  zIndex: helper.z ?? 1,
+})
+
+const onPointerDown = (event, helper) => {
+  if (event.button !== 0) return
+  event.preventDefault()
+  const stage = stageRef.value
+  if (!stage) return
+
+  zCounter += 1
+  helper.z = zCounter
+
+  const rect = stage.getBoundingClientRect()
+  drag.value = {
+    id: helper.id,
+    offsetX: event.clientX - rect.left - helper.x,
+    offsetY: event.clientY - rect.top - helper.y,
+  }
+  event.currentTarget.setPointerCapture(event.pointerId)
+}
+
+const onPointerMove = (event) => {
+  if (!drag.value) return
+  const stage = stageRef.value
+  if (!stage) return
+  const helper = helpers.value.find((item) => item.id === drag.value.id)
+  if (!helper) return
+
+  const rect = stage.getBoundingClientRect()
+  placeHelper(
+    helper,
+    event.clientX - rect.left - drag.value.offsetX,
+    event.clientY - rect.top - drag.value.offsetY,
+  )
+}
+
+const onPointerUp = () => {
+  drag.value = null
+}
+
+const isDragging = computed(() => drag.value !== null)
+
+onMounted(async () => {
+  await nextTick()
+  centerHelpers()
+  window.addEventListener('resize', clampHelpersToStage)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('resize', clampHelpersToStage)
+})
 </script>
 
 <template>
@@ -105,11 +208,15 @@ const toggleAbout = () => {
       </section>
     </div>
 
-    <!-- Right: white -->
-    <div class="relative flex h-full w-1/2 flex-col overflow-hidden bg-white p-4">
+    <!-- Right: white stage for helpers -->
+    <div
+      ref="stageRef"
+      class="relative h-full w-1/2 overflow-hidden bg-white p-4"
+      :class="isDragging ? 'select-none' : ''"
+    >
       <p
         v-show="showAbout()"
-        class="absolute top-4 right-4 left-4 text-right text-[12px] leading-normal"
+        class="pointer-events-none absolute top-4 right-4 left-4 z-50 text-right text-[12px] leading-normal"
       >
         Sarah Fensom is a film and arts journalist based in Los Angeles. With
         over 15 years of experience as a writer, she has contributed to the Los
@@ -118,9 +225,27 @@ const toggleAbout = () => {
         the co-writer and star of Lindsay Denniberg’s forthcoming film, Killer
         Makeover and a uniquely glamorous person.
       </p>
+
+      <img
+        v-for="helper in helpers"
+        :key="helper.id"
+        :src="helper.src"
+        :alt="helper.alt"
+        :style="helperStyle(helper)"
+        class="absolute top-0 left-0 touch-none select-none"
+        :class="
+          drag?.id === helper.id ? 'cursor-grabbing' : 'cursor-grab'
+        "
+        draggable="false"
+        @pointerdown="onPointerDown($event, helper)"
+        @pointermove="onPointerMove"
+        @pointerup="onPointerUp"
+        @pointercancel="onPointerUp"
+      />
+
       <button
         type="button"
-        class="mt-auto cursor-pointer self-end border-0 bg-transparent p-0 text-right font-['Times_New_Roman',Times,serif] text-[34px] leading-tight"
+        class="absolute right-4 bottom-4 z-50 cursor-pointer border-0 bg-transparent p-0 text-right font-['Times_New_Roman',Times,serif] text-[34px] leading-tight"
         :aria-expanded="showAbout()"
         @mouseenter="hovering = true"
         @mouseleave="hovering = false"
