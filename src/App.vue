@@ -70,7 +70,7 @@ const toggleAbout = () => {
     class="flex h-dvh w-full overflow-hidden font-['Times_New_Roman',Times,serif] text-[12px] leading-normal"
   >
     <!-- Left: gray, split horizontally -->
-    <div class="flex h-full w-1/2 flex-col bg-neutral-300">
+    <div class="flex h-full w-1/2 flex-col bg-neutral-200">
       <section
         class="flex min-h-0 flex-[2] flex-col overflow-hidden border-b border-black p-4"
       >
