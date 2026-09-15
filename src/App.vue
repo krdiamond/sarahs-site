@@ -105,8 +105,7 @@ const work = [
         Angeles Times, American Cinematographer, BOMB, Sight and Sound, LA
         Review of Books, Film Comment, and a host of other publications. She is
         the co-writer and star of Lindsay Denniberg’s forthcoming film, Killer
-        Makeover and a uniquely glamorous person. She is married to writer and
-        filmmaker Chris Shields.
+        Makeover and a uniquely glamorous person.
       </p>
     </div>
   </div>
