@@ -235,7 +235,7 @@ onUnmounted(() => {
               rel="noopener noreferrer"
               class="text-[#0000EE] underline"
             >
-              {{ item.date }}-{{ item.title }} <i>for {{ item.credit }}</i>
+              {{ item.date }} {{ item.title }} <i>for {{ item.credit }}</i>
             </a>
           </li>
         </ul>
@@ -250,7 +250,7 @@ onUnmounted(() => {
               rel="noopener noreferrer"
               class="text-[#0000EE] underline"
             >
-              {{ item.date }}-{{ item.title }} <i>for {{ item.credit }}</i>
+              {{ item.date }} {{ item.title }} <i>for {{ item.credit }}</i>
             </a>
           </li>
         </ul>
