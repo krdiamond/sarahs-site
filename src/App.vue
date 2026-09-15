@@ -73,7 +73,16 @@ const helpers = ref([
     src: asset('ms-piggy.png'),
     alt: 'Miss Piggy',
     width: 160,
-    height: 211,
+    height: Math.round((160 * 573) / 435),
+    x: 0,
+    y: 0,
+  },
+  {
+    id: 'forever-evil',
+    src: asset('forever-evil.png'),
+    alt: 'Forever Evil',
+    width: 140,
+    height: Math.round((140 * 503) / 473),
     x: 0,
     y: 0,
   },
@@ -82,6 +91,7 @@ const helpers = ref([
 const stageRef = ref(null)
 const drag = ref(null)
 let zCounter = 1
+let didPlace = false
 
 const clamp = (value, min, max) => Math.min(Math.max(value, min), max)
 
@@ -94,15 +104,23 @@ const placeHelper = (helper, x, y) => {
   helper.y = clamp(y, 0, maxY)
 }
 
-const centerHelpers = () => {
+const placeHelpersInitially = () => {
   const stage = stageRef.value
-  if (!stage) return
-  for (const helper of helpers.value) {
+  if (!stage || didPlace) return
+  didPlace = true
+
+  const piggy = helpers.value.find((item) => item.id === 'ms-piggy')
+  if (piggy) {
     placeHelper(
-      helper,
-      (stage.clientWidth - helper.width) / 2,
-      (stage.clientHeight - helper.height) / 2,
+      piggy,
+      (stage.clientWidth - piggy.width) / 2,
+      (stage.clientHeight - piggy.height) / 2,
     )
+  }
+
+  const evil = helpers.value.find((item) => item.id === 'forever-evil')
+  if (evil) {
+    placeHelper(evil, stage.clientWidth * 0.12, stage.clientHeight * 0.18)
   }
 }
 
@@ -114,6 +132,7 @@ const clampHelpersToStage = () => {
 
 const helperStyle = (helper) => ({
   width: `${helper.width}px`,
+  height: `${helper.height}px`,
   transform: `translate3d(${helper.x}px, ${helper.y}px, 0)`,
   zIndex: helper.z ?? 1,
 })
@@ -159,7 +178,7 @@ const isDragging = computed(() => drag.value !== null)
 
 onMounted(async () => {
   await nextTick()
-  centerHelpers()
+  placeHelpersInitially()
   window.addEventListener('resize', clampHelpersToStage)
 })
 
@@ -211,7 +230,7 @@ onUnmounted(() => {
     <!-- Right: white stage for helpers -->
     <div
       ref="stageRef"
-      class="relative h-full w-1/2 overflow-hidden bg-white p-4"
+      class="relative h-full w-1/2 overflow-hidden bg-white"
       :class="isDragging ? 'select-none' : ''"
     >
       <p
@@ -232,7 +251,7 @@ onUnmounted(() => {
         :src="helper.src"
         :alt="helper.alt"
         :style="helperStyle(helper)"
-        class="absolute top-0 left-0 touch-none select-none"
+        class="absolute top-0 left-0 block touch-none select-none"
         :class="
           drag?.id === helper.id ? 'cursor-grabbing' : 'cursor-grab'
         "
