@@ -77,15 +77,6 @@ const helpers = ref([
     x: 0,
     y: 0,
   },
-  {
-    id: 'forever-evil',
-    src: asset('forever-evil.png'),
-    alt: 'Forever Evil',
-    width: 140,
-    height: Math.round((140 * 503) / 473),
-    x: 0,
-    y: 0,
-  },
 ])
 
 const stageRef = ref(null)
@@ -116,11 +107,6 @@ const placeHelpersInitially = () => {
       (stage.clientWidth - piggy.width) / 2,
       (stage.clientHeight - piggy.height) / 2,
     )
-  }
-
-  const evil = helpers.value.find((item) => item.id === 'forever-evil')
-  if (evil) {
-    placeHelper(evil, stage.clientWidth * 0.12, stage.clientHeight * 0.18)
   }
 }
 
