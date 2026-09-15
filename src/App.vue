@@ -1,59 +1,98 @@
 <script setup>
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 
-const events = [
-  { date: '09.01.2026', title: 'Opening Reception', publication: 'Artforum' },
-  { date: '08.22.2026', title: 'Artist Talk', publication: 'MoMA' },
-  { date: '08.12.2026', title: 'Panel Discussion', publication: 'Frieze' },
-  { date: '07.30.2026', title: 'Gallery Walkthrough', publication: 'The Whitney' },
-  { date: '07.18.2026', title: 'Reading', publication: 'Printed Matter' },
-  { date: '07.04.2026', title: 'Book Launch', publication: 'The New Yorker' },
-  { date: '06.28.2026', title: 'Screening', publication: 'Anthology Film Archives' },
-  { date: '06.15.2026', title: 'Symposium', publication: 'Harvard GSD' },
-  { date: '06.02.2026', title: 'Performance', publication: 'The Kitchen' },
-  { date: '05.21.2026', title: 'Conversation', publication: 'Dia Art Foundation' },
-  { date: '05.09.2026', title: 'Lecture', publication: 'Cooper Union' },
-  { date: '04.27.2026', title: 'Roundtable', publication: 'e-flux' },
-  { date: '04.14.2026', title: 'Workshop', publication: 'Pioneer Works' },
-  { date: '04.01.2026', title: 'Opening Night', publication: 'New Museum' },
-  { date: '03.19.2026', title: 'Q&A', publication: 'Film Forum' },
-  { date: '03.07.2026', title: 'Book Signing', publication: 'McNally Jackson' },
-  { date: '02.22.2026', title: 'In Conversation', publication: 'Aperture' },
-  { date: '02.10.2026', title: 'Salon', publication: 'Hauser & Wirth' },
-  { date: '01.28.2026', title: 'Preview', publication: 'Gagosian' },
-  { date: '01.15.2026', title: 'Public Program', publication: 'The Met' },
-  { date: '12.20.2025', title: 'Holiday Open Studio', publication: 'PS1' },
-  { date: '12.05.2025', title: 'Year-End Review', publication: 'Hyperallergic' },
-  { date: '11.18.2025', title: 'Forum', publication: 'Brooklyn Museum' },
-  { date: '11.02.2025', title: 'Closing Reception', publication: 'Sadie Coles' },
-]
+const SHEET_ID = '1PIcdiUt1_Yj9Mf1zErlEPObBl5Kg6W5Z3Qd5p54-WRE'
+const sheetCsvUrl = (sheetName) =>
+  `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheetName)}`
 
-const work = [
-  { date: '06.20.2026', title: 'Portrait Series', publication: 'Aperture' },
-  { date: '06.01.2026', title: 'Editorial Feature', publication: 'Vogue' },
-  { date: '05.18.2026', title: 'Cover Story', publication: 'The Cut' },
-  { date: '05.08.2026', title: 'Studio Visit', publication: 'Mousse' },
-  { date: '04.25.2026', title: 'Photo Essay', publication: 'The New York Times' },
-  { date: '04.10.2026', title: 'Profile', publication: 'The Paris Review' },
-  { date: '03.28.2026', title: 'Interview', publication: 'BOMB' },
-  { date: '03.15.2026', title: 'Commission', publication: 'Wallpaper*' },
-  { date: '03.01.2026', title: 'Lookbook', publication: 'Acne Studios' },
-  { date: '02.14.2026', title: 'Campaign', publication: 'COS' },
-  { date: '01.30.2026', title: 'Exhibition Catalog', publication: 'Phaidon' },
-  { date: '01.12.2026', title: 'Documentary Stills', publication: 'Criterion' },
-  { date: '12.18.2025', title: 'Seasonal Edit', publication: 'SSENSE' },
-  { date: '12.02.2025', title: 'Artist Book', publication: 'Primary Information' },
-  { date: '11.20.2025', title: 'Installation Views', publication: 'Contemporary Art Daily' },
-  { date: '11.05.2025', title: 'Fashion Story', publication: 'i-D' },
-  { date: '10.22.2025', title: 'Architecture Feature', publication: 'Dezeen' },
-  { date: '10.08.2025', title: 'Travel Diary', publication: 'Apartamento' },
-  { date: '09.24.2025', title: 'Monograph Spread', publication: 'Steidl' },
-  { date: '09.10.2025', title: 'Still Life Series', publication: 'Kinfolk' },
-  { date: '08.27.2025', title: 'City Guide', publication: 'Cereal' },
-  { date: '08.12.2025', title: 'Brand Film', publication: 'Nike' },
-  { date: '07.29.2025', title: 'Archive Project', publication: 'MoMA Library' },
-  { date: '07.15.2025', title: 'Collaboration', publication: 'Supreme' },
-]
+const events = ref([])
+const work = ref([])
+
+const parseCsv = (text) => {
+  const rows = []
+  let row = []
+  let cell = ''
+  let inQuotes = false
+
+  for (let i = 0; i < text.length; i += 1) {
+    const char = text[i]
+    const next = text[i + 1]
+
+    if (inQuotes) {
+      if (char === '"' && next === '"') {
+        cell += '"'
+        i += 1
+      } else if (char === '"') {
+        inQuotes = false
+      } else {
+        cell += char
+      }
+      continue
+    }
+
+    if (char === '"') {
+      inQuotes = true
+    } else if (char === ',') {
+      row.push(cell)
+      cell = ''
+    } else if (char === '\n') {
+      row.push(cell)
+      rows.push(row)
+      row = []
+      cell = ''
+    } else if (char !== '\r') {
+      cell += char
+    }
+  }
+
+  if (cell.length || row.length) {
+    row.push(cell)
+    rows.push(row)
+  }
+
+  return rows.filter((r) => r.some((value) => value.trim() !== ''))
+}
+
+const normalizeKey = (value) => value.trim().toLowerCase()
+
+const rowsToEntries = (rows, creditKeys) => {
+  if (rows.length < 2) return []
+  const headers = rows[0].map(normalizeKey)
+  const dateIdx = headers.indexOf('date')
+  const titleIdx = headers.indexOf('title')
+  const linkIdx = headers.indexOf('link')
+  const creditIdx = creditKeys
+    .map((key) => headers.indexOf(key))
+    .find((idx) => idx !== -1)
+
+  if (dateIdx === -1 || titleIdx === -1 || creditIdx === undefined) return []
+
+  return rows
+    .slice(1)
+    .map((cols) => ({
+      date: (cols[dateIdx] || '').trim(),
+      title: (cols[titleIdx] || '').trim(),
+      credit: (cols[creditIdx] || '').trim(),
+      url: (linkIdx === -1 ? '' : cols[linkIdx] || '').trim() || '#',
+    }))
+    .filter((item) => item.date && item.title)
+}
+
+const fetchSheet = async (sheetName, creditKeys) => {
+  const response = await fetch(sheetCsvUrl(sheetName))
+  if (!response.ok) throw new Error(`Failed to load ${sheetName}`)
+  const text = await response.text()
+  return rowsToEntries(parseCsv(text), creditKeys)
+}
+
+const loadLists = async () => {
+  const [eventRows, workRows] = await Promise.all([
+    fetchSheet('Events', ['location', 'publication']),
+    fetchSheet('Work', ['publication', 'location']),
+  ])
+  events.value = eventRows
+  work.value = workRows
+}
 
 const hovering = ref(false)
 const pinned = ref(false)
@@ -166,6 +205,11 @@ onMounted(async () => {
   await nextTick()
   placeHelpersInitially()
   window.addEventListener('resize', clampHelpersToStage)
+  try {
+    await loadLists()
+  } catch (error) {
+    console.error(error)
+  }
 })
 
 onUnmounted(() => {
@@ -186,12 +230,12 @@ onUnmounted(() => {
         <ul class="min-h-0 flex-1 space-y-1 overflow-y-auto">
           <li v-for="item in events" :key="item.date + item.title">
             <a
-              href="#"
+              :href="item.url"
               target="_blank"
               rel="noopener noreferrer"
               class="text-[#0000EE] underline"
             >
-              {{ item.date }}-{{ item.title }} <i>for {{ item.publication }}</i>
+              {{ item.date }}-{{ item.title }} <i>for {{ item.credit }}</i>
             </a>
           </li>
         </ul>
@@ -201,12 +245,12 @@ onUnmounted(() => {
         <ul class="min-h-0 flex-1 space-y-1 overflow-y-auto">
           <li v-for="item in work" :key="item.date + item.title">
             <a
-              href="#"
+              :href="item.url"
               target="_blank"
               rel="noopener noreferrer"
               class="text-[#0000EE] underline"
             >
-              {{ item.date }}-{{ item.title }} <i>for {{ item.publication }}</i>
+              {{ item.date }}-{{ item.title }} <i>for {{ item.credit }}</i>
             </a>
           </li>
         </ul>
