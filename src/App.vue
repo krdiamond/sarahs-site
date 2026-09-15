@@ -60,8 +60,13 @@ const work = [
   >
     <!-- Left: gray, split horizontally -->
     <div class="flex h-full w-1/2 flex-col bg-neutral-300">
-      <section class="flex min-h-0 flex-1 flex-col overflow-hidden border-b border-black p-4">
-        <h1 class="mb-3 shrink-0">Events</h1>
+      <h1 class="shrink-0 px-4 pt-4 pb-3 text-left text-[34px] leading-tight">
+        Sarah Fensom
+      </h1>
+      <section
+        class="flex min-h-0 flex-[2] flex-col overflow-hidden border-b border-black px-4 pb-4"
+      >
+        <h2 class="mb-3 shrink-0">Events</h2>
         <ul class="min-h-0 flex-1 space-y-1 overflow-y-auto">
           <li v-for="item in events" :key="item.date + item.title">
             <a
@@ -75,8 +80,8 @@ const work = [
           </li>
         </ul>
       </section>
-      <section class="flex min-h-0 flex-1 flex-col overflow-hidden p-4">
-        <h1 class="mb-3 shrink-0">Work</h1>
+      <section class="flex min-h-0 flex-[3] flex-col overflow-hidden p-4">
+        <h2 class="mb-3 shrink-0">Work</h2>
         <ul class="min-h-0 flex-1 space-y-1 overflow-y-auto">
           <li v-for="item in work" :key="item.date + item.title">
             <a
@@ -94,8 +99,7 @@ const work = [
 
     <!-- Right: white -->
     <div class="h-full w-1/2 overflow-hidden bg-white p-4 text-right">
-      <h1 class="text-[34px] leading-tight">Sarah Fensom</h1>
-      <p class="mt-3 text-[12px] leading-normal">
+      <p class="text-[12px] leading-normal">
         Sarah Fensom is a film and arts journalist based in Los Angeles. With
         over 15 years of experience as a writer, she has contributed to the Los
         Angeles Times, American Cinematographer, BOMB, Sight and Sound, LA
