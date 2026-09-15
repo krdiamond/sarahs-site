@@ -1,4 +1,6 @@
 <script setup>
+import { ref } from 'vue'
+
 const events = [
   { date: '09.01.2026', title: 'Opening Reception', publication: 'Artforum' },
   { date: '08.22.2026', title: 'Artist Talk', publication: 'MoMA' },
@@ -52,6 +54,15 @@ const work = [
   { date: '07.29.2025', title: 'Archive Project', publication: 'MoMA Library' },
   { date: '07.15.2025', title: 'Collaboration', publication: 'Supreme' },
 ]
+
+const hovering = ref(false)
+const pinned = ref(false)
+
+const showAbout = () => hovering.value || pinned.value
+
+const toggleAbout = () => {
+  pinned.value = !pinned.value
+}
 </script>
 
 <template>
@@ -96,7 +107,10 @@ const work = [
 
     <!-- Right: white -->
     <div class="relative flex h-full w-1/2 flex-col overflow-hidden bg-white p-4">
-      <p class="text-right text-[12px] leading-normal">
+      <p
+        v-show="showAbout()"
+        class="absolute top-4 right-4 left-4 text-right text-[12px] leading-normal"
+      >
         Sarah Fensom is a film and arts journalist based in Los Angeles. With
         over 15 years of experience as a writer, she has contributed to the Los
         Angeles Times, American Cinematographer, BOMB, Sight and Sound, LA
@@ -104,11 +118,16 @@ const work = [
         the co-writer and star of Lindsay Denniberg’s forthcoming film, Killer
         Makeover and a uniquely glamorous person.
       </p>
-      <h1
-        class="mt-auto self-end text-right text-[34px] leading-tight"
+      <button
+        type="button"
+        class="mt-auto cursor-pointer self-end border-0 bg-transparent p-0 text-right font-['Times_New_Roman',Times,serif] text-[34px] leading-tight"
+        :aria-expanded="showAbout()"
+        @mouseenter="hovering = true"
+        @mouseleave="hovering = false"
+        @click="toggleAbout"
       >
         Sarah Fensom
-      </h1>
+      </button>
     </div>
   </div>
 </template>
