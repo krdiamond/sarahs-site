@@ -271,15 +271,19 @@ const placeHelpersInitially = () => {
   const stage = stageRef.value
   if (!stage || !helpers.value.length) return
 
-  const count = helpers.value.length
   helpers.value.forEach((helper, index) => {
-    const offsetX = (index - (count - 1) / 2) * 48
-    const offsetY = (index - (count - 1) / 2) * 36
-    placeHelper(
-      helper,
-      (stage.clientWidth - helper.width) / 2 + offsetX,
-      (stage.clientHeight - helper.height) / 2 + offsetY,
-    )
+    if (index === 0) {
+      placeHelper(
+        helper,
+        (stage.clientWidth - helper.width) / 2,
+        (stage.clientHeight - helper.height) / 2,
+      )
+      return
+    }
+
+    const maxX = Math.max(0, stage.clientWidth - helper.width)
+    const maxY = Math.max(0, stage.clientHeight - helper.height)
+    placeHelper(helper, Math.random() * maxX, Math.random() * maxY)
   })
 }
 
