@@ -1,12 +1,18 @@
 <script setup>
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
+import JSZip from 'jszip'
 
 const SHEET_ID = '1PIcdiUt1_Yj9Mf1zErlEPObBl5Kg6W5Z3Qd5p54-WRE'
+const DEFAULT_ICON_WIDTH = 160
 const sheetCsvUrl = (sheetName) =>
   `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheetName)}`
+const sheetXlsxUrl = () =>
+  `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=xlsx`
 
 const events = ref([])
 const work = ref([])
+const helpers = ref([])
+const objectUrls = []
 
 const parseCsv = (text) => {
   const rows = []
@@ -94,6 +100,149 @@ const loadLists = async () => {
   work.value = workRows
 }
 
+const attr = (xml, name) => {
+  const match = xml.match(new RegExp(`${name}="([^"]+)"`))
+  return match ? match[1] : null
+}
+
+const parseRelationships = (xml) => {
+  const map = {}
+  const matches = xml.matchAll(/<Relationship\b[^>]*>/g)
+  for (const match of matches) {
+    const tag = match[0]
+    const id = attr(tag, 'Id')
+    const target = attr(tag, 'Target')
+    if (id && target) map[id] = target
+  }
+  return map
+}
+
+const resolveZipPath = (fromPath, target) => {
+  if (target.startsWith('/')) return target.slice(1)
+  const parts = fromPath.split('/').slice(0, -1)
+  for (const part of target.split('/')) {
+    if (part === '..') parts.pop()
+    else if (part !== '.') parts.push(part)
+  }
+  return parts.join('/')
+}
+
+const readZipText = async (zip, path) => {
+  const file = zip.file(path)
+  if (!file) throw new Error(`Missing ${path}`)
+  return file.async('string')
+}
+
+const loadImageNaturalSize = (src) =>
+  new Promise((resolve) => {
+    const img = new Image()
+    img.onload = () =>
+      resolve({ width: img.naturalWidth, height: img.naturalHeight })
+    img.onerror = () =>
+      resolve({ width: DEFAULT_ICON_WIDTH, height: DEFAULT_ICON_WIDTH })
+    img.src = src
+  })
+
+const findIconsSheetPath = async (zip) => {
+  const workbook = await readZipText(zip, 'xl/workbook.xml')
+  const rels = parseRelationships(
+    await readZipText(zip, 'xl/_rels/workbook.xml.rels'),
+  )
+  const sheetMatch = workbook.match(/<sheet\b[^>]*name="Icons"[^>]*\/?>/)
+  if (!sheetMatch) throw new Error('Icons sheet not found')
+  const rid = attr(sheetMatch[0], 'r:id')
+  const target = rid && rels[rid]
+  if (!target) throw new Error('Icons worksheet relationship missing')
+  return resolveZipPath('xl/workbook.xml', target)
+}
+
+const findDrawingPath = async (zip, sheetPath) => {
+  const relsPath = sheetPath.replace(
+    /worksheets\/([^/]+)$/,
+    'worksheets/_rels/$1.rels',
+  )
+  const relsXml = await readZipText(zip, relsPath)
+  const rels = parseRelationships(relsXml)
+  const drawingId = Object.keys(rels).find((id) =>
+    rels[id].includes('drawings/'),
+  )
+  if (!drawingId) return null
+  return resolveZipPath(sheetPath, rels[drawingId])
+}
+
+const findIconImagePaths = async (zip, drawingPath) => {
+  const drawingRelsPath = drawingPath.replace(
+    /drawings\/([^/]+)$/,
+    'drawings/_rels/$1.rels',
+  )
+  const drawingXml = await readZipText(zip, drawingPath)
+  const drawingRels = parseRelationships(await readZipText(zip, drawingRelsPath))
+
+  const embeds = [...drawingXml.matchAll(/r:embed="([^"]+)"/g)].map(
+    (match) => match[1],
+  )
+  const ordered = embeds.length
+    ? embeds
+    : Object.keys(drawingRels).sort()
+
+  return ordered
+    .map((id) => drawingRels[id])
+    .filter(Boolean)
+    .map((target) => resolveZipPath(drawingPath, target))
+}
+
+const loadIconsFromSheet = async () => {
+  const response = await fetch(sheetXlsxUrl())
+  if (!response.ok) throw new Error('Failed to load Icons workbook')
+  const zip = await JSZip.loadAsync(await response.arrayBuffer())
+
+  const sheetPath = await findIconsSheetPath(zip)
+  const drawingPath = await findDrawingPath(zip, sheetPath)
+  let imagePaths = drawingPath
+    ? await findIconImagePaths(zip, drawingPath)
+    : []
+
+  if (!imagePaths.length) {
+    imagePaths = Object.keys(zip.files)
+      .filter((path) => path.startsWith('xl/media/'))
+      .sort()
+  }
+
+  const loaded = []
+  for (let i = 0; i < imagePaths.length; i += 1) {
+    const path = imagePaths[i]
+    const file = zip.file(path)
+    if (!file) continue
+    const blob = await file.async('blob')
+    const type =
+      path.endsWith('.png')
+        ? 'image/png'
+        : path.endsWith('.jpg') || path.endsWith('.jpeg')
+          ? 'image/jpeg'
+          : path.endsWith('.webp')
+            ? 'image/webp'
+            : blob.type || 'image/png'
+    const url = URL.createObjectURL(new Blob([blob], { type }))
+    objectUrls.push(url)
+    const natural = await loadImageNaturalSize(url)
+    const width = DEFAULT_ICON_WIDTH
+    const height = Math.round((width * natural.height) / natural.width) || width
+    loaded.push({
+      id: `icon-${i}-${path.split('/').pop()}`,
+      src: url,
+      alt: `Icon ${i + 1}`,
+      width,
+      height,
+      x: 0,
+      y: 0,
+    })
+  }
+
+  helpers.value = loaded
+  await nextTick()
+  placeHelpersInitially()
+}
+
 const hovering = ref(false)
 const pinned = ref(false)
 
@@ -103,25 +252,9 @@ const toggleAbout = () => {
   pinned.value = !pinned.value
 }
 
-const asset = (file) => `${import.meta.env.BASE_URL}${file}`
-
-/** Icons on the white panel. Add more entries here later. */
-const helpers = ref([
-  {
-    id: 'ms-piggy',
-    src: asset('ms-piggy.png'),
-    alt: 'Miss Piggy',
-    width: 160,
-    height: Math.round((160 * 573) / 435),
-    x: 0,
-    y: 0,
-  },
-])
-
 const stageRef = ref(null)
 const drag = ref(null)
 let zCounter = 1
-let didPlace = false
 
 const clamp = (value, min, max) => Math.min(Math.max(value, min), max)
 
@@ -136,17 +269,18 @@ const placeHelper = (helper, x, y) => {
 
 const placeHelpersInitially = () => {
   const stage = stageRef.value
-  if (!stage || didPlace) return
-  didPlace = true
+  if (!stage || !helpers.value.length) return
 
-  const piggy = helpers.value.find((item) => item.id === 'ms-piggy')
-  if (piggy) {
+  const count = helpers.value.length
+  helpers.value.forEach((helper, index) => {
+    const offsetX = (index - (count - 1) / 2) * 48
+    const offsetY = (index - (count - 1) / 2) * 36
     placeHelper(
-      piggy,
-      (stage.clientWidth - piggy.width) / 2,
-      (stage.clientHeight - piggy.height) / 2,
+      helper,
+      (stage.clientWidth - helper.width) / 2 + offsetX,
+      (stage.clientHeight - helper.height) / 2 + offsetY,
     )
-  }
+  })
 }
 
 const clampHelpersToStage = () => {
@@ -202,11 +336,9 @@ const onPointerUp = () => {
 const isDragging = computed(() => drag.value !== null)
 
 onMounted(async () => {
-  await nextTick()
-  placeHelpersInitially()
   window.addEventListener('resize', clampHelpersToStage)
   try {
-    await loadLists()
+    await Promise.all([loadLists(), loadIconsFromSheet()])
   } catch (error) {
     console.error(error)
   }
@@ -214,6 +346,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   window.removeEventListener('resize', clampHelpersToStage)
+  for (const url of objectUrls) URL.revokeObjectURL(url)
 })
 </script>
 
