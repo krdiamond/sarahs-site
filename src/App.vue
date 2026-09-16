@@ -267,9 +267,17 @@ const placeHelper = (helper, x, y) => {
   helper.y = clamp(y, 0, maxY)
 }
 
+const rectsOverlap = (a, b, gap = 8) =>
+  a.x < b.x + b.width + gap &&
+  a.x + a.width + gap > b.x &&
+  a.y < b.y + b.height + gap &&
+  a.y + a.height + gap > b.y
+
 const placeHelpersInitially = () => {
   const stage = stageRef.value
   if (!stage || !helpers.value.length) return
+
+  const placed = []
 
   helpers.value.forEach((helper, index) => {
     if (index === 0) {
@@ -278,12 +286,65 @@ const placeHelpersInitially = () => {
         (stage.clientWidth - helper.width) / 2,
         (stage.clientHeight - helper.height) / 2,
       )
+      placed.push({
+        x: helper.x,
+        y: helper.y,
+        width: helper.width,
+        height: helper.height,
+      })
       return
     }
 
     const maxX = Math.max(0, stage.clientWidth - helper.width)
     const maxY = Math.max(0, stage.clientHeight - helper.height)
-    placeHelper(helper, Math.random() * maxX, Math.random() * maxY)
+    let x = 0
+    let y = 0
+    let found = false
+
+    for (let attempt = 0; attempt < 80; attempt += 1) {
+      x = Math.random() * maxX
+      y = Math.random() * maxY
+      const candidate = {
+        x,
+        y,
+        width: helper.width,
+        height: helper.height,
+      }
+      if (!placed.some((rect) => rectsOverlap(candidate, rect))) {
+        found = true
+        break
+      }
+    }
+
+    if (!found) {
+      // Fallback: walk a coarse grid for the first non-overlapping slot
+      const stepX = Math.max(24, helper.width / 2)
+      const stepY = Math.max(24, helper.height / 2)
+      outer: for (let gy = 0; gy <= maxY; gy += stepY) {
+        for (let gx = 0; gx <= maxX; gx += stepX) {
+          const candidate = {
+            x: gx,
+            y: gy,
+            width: helper.width,
+            height: helper.height,
+          }
+          if (!placed.some((rect) => rectsOverlap(candidate, rect))) {
+            x = gx
+            y = gy
+            found = true
+            break outer
+          }
+        }
+      }
+    }
+
+    placeHelper(helper, x, y)
+    placed.push({
+      x: helper.x,
+      y: helper.y,
+      width: helper.width,
+      height: helper.height,
+    })
   })
 }
 
