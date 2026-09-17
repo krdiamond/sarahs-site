@@ -419,7 +419,7 @@ onUnmounted(() => {
   <div
     class="flex h-dvh w-full overflow-hidden font-['Times_New_Roman',Times,serif] text-[12px] leading-normal"
   >
-    <!-- Left: gray; Events 1/3, Work 2/3 -->
+    <!-- Left: gray; Events 1/4, Work 3/4 -->
     <div class="flex h-full w-1/2 flex-col bg-neutral-200">
       <section
         class="flex min-h-0 flex-[1] flex-col overflow-hidden border-b border-black p-4"
@@ -438,7 +438,7 @@ onUnmounted(() => {
           </li>
         </ul>
       </section>
-      <section class="flex min-h-0 flex-[2] flex-col overflow-hidden p-4">
+      <section class="flex min-h-0 flex-[3] flex-col overflow-hidden p-4">
         <h2 class="mb-3 shrink-0">Work</h2>
         <ul class="min-h-0 flex-1 space-y-1 overflow-y-auto">
           <li v-for="item in work" :key="item.date + item.title">
