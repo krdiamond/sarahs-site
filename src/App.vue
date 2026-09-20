@@ -5,10 +5,9 @@ import JSZip from 'jszip'
 const SHEET_ID = '1PIcdiUt1_Yj9Mf1zErlEPObBl5Kg6W5Z3Qd5p54-WRE'
 const DEFAULT_ICON_WIDTH = 160
 const MOBILE_MQ = '(max-width: 767px)'
-const BIO_TEXT =
-  'Sarah Fensom is a film and arts journalist based in Los Angeles. With over 15 years of experience as a writer, she has contributed to the Los Angeles Times, American Cinematographer, BOMB, Sight and Sound, LA Review of Books, Film Comment, and a host of other publications. She is the co-writer and star of Lindsay Denniberg’s forthcoming film, Killer Makeover and a uniquely glamorous person.'
 const EVENTS_ERROR_MSG = 'Couldn’t load events — try refreshing'
 const WORK_ERROR_MSG = 'Couldn’t load works — try refreshing'
+const CONTACT_ERROR_MSG = 'Couldn’t load contact — try refreshing'
 
 const sheetCsvUrl = (sheetName) =>
   `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheetName)}`
@@ -17,8 +16,14 @@ const sheetXlsxUrl = () =>
 
 const events = ref([])
 const work = ref([])
+const contact = ref({
+  about: '',
+  email: '',
+  instagram: '',
+})
 const eventsError = ref('')
 const workError = ref('')
+const contactError = ref('')
 const helpers = ref([])
 const objectUrls = []
 const isMobile = ref(false)
@@ -101,10 +106,38 @@ const fetchSheet = async (sheetName, creditKeys) => {
   return rowsToEntries(parseCsv(text), creditKeys)
 }
 
+const fetchContactSheet = async () => {
+  const response = await fetch(sheetCsvUrl('Contact'))
+  if (!response.ok) throw new Error('Failed to load Contact')
+  const rows = parseCsv(await response.text())
+  if (rows.length < 2) throw new Error('Contact sheet is empty')
+
+  const headers = rows[0].map(normalizeKey)
+  const textIdx = headers.indexOf('text')
+  const contentIdx = headers.indexOf('content')
+  if (textIdx === -1 || contentIdx === -1) {
+    throw new Error('Contact sheet missing Text/Content columns')
+  }
+
+  const fields = {}
+  for (const cols of rows.slice(1)) {
+    const key = normalizeKey(cols[textIdx] || '')
+    if (!key) continue
+    fields[key] = (cols[contentIdx] || '').trim()
+  }
+
+  return {
+    about: fields.about || '',
+    email: fields.email || '',
+    instagram: fields.instagram || '',
+  }
+}
+
 const loadLists = async () => {
-  const [eventsResult, workResult] = await Promise.allSettled([
+  const [eventsResult, workResult, contactResult] = await Promise.allSettled([
     fetchSheet('Events', ['location', 'publication']),
     fetchSheet('Work', ['publication', 'location']),
+    fetchContactSheet(),
   ])
 
   if (eventsResult.status === 'fulfilled') {
@@ -123,6 +156,15 @@ const loadLists = async () => {
     work.value = []
     workError.value = WORK_ERROR_MSG
     console.error(workResult.reason)
+  }
+
+  if (contactResult.status === 'fulfilled') {
+    contact.value = contactResult.value
+    contactError.value = ''
+  } else {
+    contact.value = { about: '', email: '', instagram: '' }
+    contactError.value = CONTACT_ERROR_MSG
+    console.error(contactResult.reason)
   }
 }
 
@@ -494,42 +536,57 @@ onUnmounted(() => {
         aria-labelledby="contact-heading"
       >
         <h2 id="contact-heading" class="mb-3 shrink-0 font-bold">Contact</h2>
-        <ul class="space-y-1">
-          <li class="max-md:mb-3">
-            <div class="flex flex-wrap items-center gap-2">
-              <a
-                href="mailto:sefensom@gmail.com"
-                class="text-[#0000EE] underline"
-              >
-                sefensom@gmail.com
-              </a>
-              <a
-                href="https://www.instagram.com/mycharades_grease2/"
-                target="_blank"
-                rel="noopener noreferrer"
-                class="inline-flex min-h-6 min-w-6 items-center text-[#0000EE]"
-                aria-label="Instagram (opens in a new tab)"
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  viewBox="0 0 24 24"
-                  width="16"
-                  height="16"
-                  fill="currentColor"
-                  aria-hidden="true"
-                  class="shrink-0"
+        <p
+          v-if="contactError"
+          class="m-0 min-h-0 flex-1 overflow-y-auto overscroll-contain"
+          role="status"
+          aria-live="polite"
+        >
+          {{ contactError }}
+        </p>
+        <div
+          v-else
+          class="min-h-0 flex-1 overflow-y-auto overscroll-contain"
+        >
+          <ul class="space-y-1">
+            <li class="max-md:mb-3">
+              <div class="flex flex-wrap items-center gap-2">
+                <a
+                  v-if="contact.email"
+                  :href="`mailto:${contact.email}`"
+                  class="text-[#0000EE] underline"
                 >
-                  <path
-                    d="M7 2h10a5 5 0 0 1 5 5v10a5 5 0 0 1-5 5H7a5 5 0 0 1-5-5V7a5 5 0 0 1 5-5zm0 2a3 3 0 0 0-3 3v10a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3V7a3 3 0 0 0-3-3H7zm5 3.5A4.5 4.5 0 1 1 7.5 12 4.5 4.5 0 0 1 12 7.5zm0 2A2.5 2.5 0 1 0 14.5 12 2.5 2.5 0 0 0 12 9.5zM17.75 6a1.25 1.25 0 1 1-1.25 1.25A1.25 1.25 0 0 1 17.75 6z"
-                  />
-                </svg>
-              </a>
-            </div>
-          </li>
-          <li class="max-md:mb-3">
-            <p class="m-0">{{ BIO_TEXT }}</p>
-          </li>
-        </ul>
+                  {{ contact.email }}
+                </a>
+                <a
+                  v-if="contact.instagram"
+                  :href="contact.instagram"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="inline-flex min-h-6 min-w-6 items-center text-[#0000EE]"
+                  aria-label="Instagram (opens in a new tab)"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 24 24"
+                    width="16"
+                    height="16"
+                    fill="currentColor"
+                    aria-hidden="true"
+                    class="shrink-0"
+                  >
+                    <path
+                      d="M7 2h10a5 5 0 0 1 5 5v10a5 5 0 0 1-5 5H7a5 5 0 0 1-5-5V7a5 5 0 0 1 5-5zm0 2a3 3 0 0 0-3 3v10a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3V7a3 3 0 0 0-3-3H7zm5 3.5A4.5 4.5 0 1 1 7.5 12 4.5 4.5 0 0 1 12 7.5zm0 2A2.5 2.5 0 1 0 14.5 12 2.5 2.5 0 0 0 12 9.5zM17.75 6a1.25 1.25 0 1 1-1.25 1.25A1.25 1.25 0 0 1 17.75 6z"
+                    />
+                  </svg>
+                </a>
+              </div>
+            </li>
+            <li v-if="contact.about" class="max-md:mb-3">
+              <p class="m-0">{{ contact.about }}</p>
+            </li>
+          </ul>
+        </div>
       </section>
       <section
         class="flex min-h-0 flex-[1_1_0%] flex-col overflow-hidden border-b border-black p-4"
