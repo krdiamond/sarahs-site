@@ -426,7 +426,6 @@ const helperStyle = (helper) => ({
 })
 
 const onPointerDown = (event, helper) => {
-  if (helper.isPrimary) return
   if (event.button !== 0) return
   event.preventDefault()
   const stage = stageRef.value
@@ -449,7 +448,7 @@ const onPointerMove = (event) => {
   const stage = stageRef.value
   if (!stage) return
   const helper = helpers.value.find((item) => item.id === drag.value.id)
-  if (!helper || helper.isPrimary) return
+  if (!helper) return
 
   const rect = stage.getBoundingClientRect()
   placeHelper(
@@ -488,54 +487,54 @@ onUnmounted(() => {
   <main
     class="flex h-dvh w-full overflow-hidden font-['Times_New_Roman',Times,serif] text-[12px] leading-normal"
   >
-    <!-- Left: gray; Contact, Events, Work — shared scroll pattern -->
+    <!-- Left: gray; Contact 1/4, Events 1/4, Work 1/2 -->
     <div class="flex h-full min-h-0 w-1/2 flex-col bg-neutral-200">
       <section
-        class="max-h-[40%] shrink-0 overflow-y-auto border-b border-black p-4"
+        class="flex min-h-0 flex-[1_1_0%] flex-col overflow-hidden border-b border-black p-4"
         aria-labelledby="contact-heading"
       >
-        <h2 id="contact-heading" class="mb-3">Contact</h2>
+        <h2 id="contact-heading" class="mb-3 shrink-0 font-bold">Contact</h2>
         <ul class="space-y-1">
-          <li class="max-md:mb-2">
-            <a
-              href="mailto:sefensom@gmail.com"
-              class="text-[#0000EE] underline"
-            >
-              sefensom@gmail.com
-            </a>
-          </li>
-          <li class="max-md:mb-2">
-            <p class="m-0">{{ BIO_TEXT }}</p>
-          </li>
-          <li class="max-md:mb-2">
-            <a
-              href="https://www.instagram.com/mycharades_grease2/"
-              target="_blank"
-              rel="noopener noreferrer"
-              class="inline-flex min-h-6 min-w-6 items-center text-[#0000EE]"
-              aria-label="Instagram (opens in a new tab)"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 24 24"
-                width="16"
-                height="16"
-                fill="currentColor"
-                aria-hidden="true"
-                class="shrink-0"
+          <li class="max-md:mb-3">
+            <div class="flex flex-wrap items-center gap-2">
+              <a
+                href="mailto:sefensom@gmail.com"
+                class="text-[#0000EE] underline"
               >
-                <path
-                  d="M7 2h10a5 5 0 0 1 5 5v10a5 5 0 0 1-5 5H7a5 5 0 0 1-5-5V7a5 5 0 0 1 5-5zm0 2a3 3 0 0 0-3 3v10a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3V7a3 3 0 0 0-3-3H7zm5 3.5A4.5 4.5 0 1 1 7.5 12 4.5 4.5 0 0 1 12 7.5zm0 2A2.5 2.5 0 1 0 14.5 12 2.5 2.5 0 0 0 12 9.5zM17.75 6a1.25 1.25 0 1 1-1.25 1.25A1.25 1.25 0 0 1 17.75 6z"
-                />
-              </svg>
-            </a>
+                sefensom@gmail.com
+              </a>
+              <a
+                href="https://www.instagram.com/mycharades_grease2/"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="inline-flex min-h-6 min-w-6 items-center text-[#0000EE]"
+                aria-label="Instagram (opens in a new tab)"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  width="16"
+                  height="16"
+                  fill="currentColor"
+                  aria-hidden="true"
+                  class="shrink-0"
+                >
+                  <path
+                    d="M7 2h10a5 5 0 0 1 5 5v10a5 5 0 0 1-5 5H7a5 5 0 0 1-5-5V7a5 5 0 0 1 5-5zm0 2a3 3 0 0 0-3 3v10a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3V7a3 3 0 0 0-3-3H7zm5 3.5A4.5 4.5 0 1 1 7.5 12 4.5 4.5 0 0 1 12 7.5zm0 2A2.5 2.5 0 1 0 14.5 12 2.5 2.5 0 0 0 12 9.5zM17.75 6a1.25 1.25 0 1 1-1.25 1.25A1.25 1.25 0 0 1 17.75 6z"
+                  />
+                </svg>
+              </a>
+            </div>
+          </li>
+          <li class="max-md:mb-3">
+            <p class="m-0">{{ BIO_TEXT }}</p>
           </li>
         </ul>
       </section>
       <section
         class="flex min-h-0 flex-[1_1_0%] flex-col overflow-hidden border-b border-black p-4"
       >
-        <h2 class="mb-3 shrink-0">Events</h2>
+        <h2 class="mb-3 shrink-0 font-bold">Events</h2>
         <p
           v-if="eventsError"
           class="m-0 min-h-0 flex-1 overflow-y-auto"
@@ -551,7 +550,7 @@ onUnmounted(() => {
           <li
             v-for="item in events"
             :key="item.date + item.title"
-            class="max-md:mb-2"
+            class="max-md:mb-3"
           >
             <a
               :href="item.url"
@@ -566,9 +565,9 @@ onUnmounted(() => {
         </ul>
       </section>
       <section
-        class="flex min-h-0 flex-[4_1_0%] flex-col overflow-hidden p-4"
+        class="flex min-h-0 flex-[2_1_0%] flex-col overflow-hidden p-4"
       >
-        <h2 class="mb-3 shrink-0">Work</h2>
+        <h2 class="mb-3 shrink-0 font-bold">Work</h2>
         <p
           v-if="workError"
           class="m-0 min-h-0 flex-1 overflow-y-auto"
@@ -584,7 +583,7 @@ onUnmounted(() => {
           <li
             v-for="item in work"
             :key="item.date + item.title"
-            class="max-md:mb-2"
+            class="max-md:mb-3"
           >
             <a
               :href="item.url"
@@ -615,11 +614,7 @@ onUnmounted(() => {
         :style="helperStyle(helper)"
         class="absolute top-0 left-0 block touch-none select-none"
         :class="
-          helper.isPrimary
-            ? 'cursor-default'
-            : drag?.id === helper.id
-              ? 'cursor-grabbing'
-              : 'cursor-grab'
+          drag?.id === helper.id ? 'cursor-grabbing' : 'cursor-grab'
         "
         draggable="false"
         @pointerdown="onPointerDown($event, helper)"
