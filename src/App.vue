@@ -657,34 +657,36 @@ onUnmounted(() => {
     </div>
 
     <!-- Right: white stage for helpers -->
-    <div
-      ref="stageRef"
-      class="relative h-full w-1/2 overflow-hidden bg-white"
-      :class="isDragging ? 'select-none' : ''"
-    >
-      <img
-        v-for="helper in helpers"
-        :key="helper.id"
-        :src="helper.src"
-        alt=""
-        aria-hidden="true"
-        :style="helperStyle(helper)"
-        class="absolute top-0 left-0 block touch-none select-none"
-        :class="
-          drag?.id === helper.id ? 'cursor-grabbing' : 'cursor-grab'
-        "
-        draggable="false"
-        @pointerdown="onPointerDown($event, helper)"
-        @pointermove="onPointerMove"
-        @pointerup="onPointerUp"
-        @pointercancel="onPointerUp"
-      />
-
-      <h1
-        class="absolute right-4 bottom-4 z-50 m-0 text-right font-['Times_New_Roman',Times,serif] text-[34px] leading-tight"
+    <div class="relative h-full w-1/2 overflow-hidden bg-white p-4">
+      <div
+        ref="stageRef"
+        class="relative h-full w-full overflow-hidden"
+        :class="isDragging ? 'select-none' : ''"
       >
-        Sarah Fensom
-      </h1>
+        <img
+          v-for="helper in helpers"
+          :key="helper.id"
+          :src="helper.src"
+          alt=""
+          aria-hidden="true"
+          :style="helperStyle(helper)"
+          class="absolute top-0 left-0 block touch-none select-none"
+          :class="
+            drag?.id === helper.id ? 'cursor-grabbing' : 'cursor-grab'
+          "
+          draggable="false"
+          @pointerdown="onPointerDown($event, helper)"
+          @pointermove="onPointerMove"
+          @pointerup="onPointerUp"
+          @pointercancel="onPointerUp"
+        />
+
+        <h1
+          class="absolute right-0 bottom-0 z-50 m-0 text-right font-['Times_New_Roman',Times,serif] text-[34px] leading-tight"
+        >
+          Sarah Fensom
+        </h1>
+      </div>
     </div>
   </main>
 </template>
