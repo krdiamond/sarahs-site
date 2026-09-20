@@ -214,18 +214,22 @@ const loadImageNaturalSize = (src) =>
     img.src = src
   })
 
-const findIconsSheetPath = async (zip) => {
+const findSheetPath = async (zip, sheetName) => {
   const workbook = await readZipText(zip, 'xl/workbook.xml')
   const rels = parseRelationships(
     await readZipText(zip, 'xl/_rels/workbook.xml.rels'),
   )
-  const sheetMatch = workbook.match(/<sheet\b[^>]*name="Icons"[^>]*\/?>/)
-  if (!sheetMatch) throw new Error('Icons sheet not found')
+  const sheetMatch = workbook.match(
+    new RegExp(`<sheet\\b[^>]*name="${sheetName}"[^>]*\\/?>`),
+  )
+  if (!sheetMatch) throw new Error(`${sheetName} sheet not found`)
   const rid = attr(sheetMatch[0], 'r:id')
   const target = rid && rels[rid]
-  if (!target) throw new Error('Icons worksheet relationship missing')
+  if (!target) throw new Error(`${sheetName} worksheet relationship missing`)
   return resolveZipPath('xl/workbook.xml', target)
 }
+
+const findIconsSheetPath = async (zip) => findSheetPath(zip, 'Icons')
 
 const findDrawingPath = async (zip, sheetPath) => {
   const relsPath = sheetPath.replace(
@@ -246,8 +250,10 @@ const findIconImagePaths = async (zip, drawingPath) => {
     /drawings\/([^/]+)$/,
     'drawings/_rels/$1.rels',
   )
+  const relsFile = zip.file(drawingRelsPath)
+  if (!relsFile) return []
   const drawingXml = await readZipText(zip, drawingPath)
-  const drawingRels = parseRelationships(await readZipText(zip, drawingRelsPath))
+  const drawingRels = parseRelationships(await relsFile.async('string'))
 
   const embeds = [...drawingXml.matchAll(/r:embed="([^"]+)"/g)].map(
     (match) => match[1],
@@ -270,7 +276,140 @@ const setFaviconFromSrc = (src, type = 'image/png') => {
     document.head.appendChild(link)
   }
   link.type = type
+  link.sizes = type === 'image/png' ? '32x32' : 'any'
   link.href = src
+}
+
+const loadImageElement = (src) =>
+  new Promise((resolve, reject) => {
+    const img = new Image()
+    img.onload = () => resolve(img)
+    img.onerror = reject
+    img.src = src
+  })
+
+/** Fit sheet artwork into a sharp square PNG data URL for favicon use. */
+const prepareFaviconFromImageSrc = async (src, size = 128) => {
+  const img = await loadImageElement(src)
+  const canvas = document.createElement('canvas')
+  const ctx = canvas.getContext('2d')
+  const sw = img.naturalWidth || img.width
+  const sh = img.naturalHeight || img.height
+
+  // Sample alpha to trim empty edges when possible
+  const probe = document.createElement('canvas')
+  probe.width = sw
+  probe.height = sh
+  const pctx = probe.getContext('2d')
+  pctx.drawImage(img, 0, 0)
+  const { data } = pctx.getImageData(0, 0, sw, sh)
+  let minX = sw
+  let minY = sh
+  let maxX = -1
+  let maxY = -1
+  for (let y = 0; y < sh; y += 1) {
+    for (let x = 0; x < sw; x += 1) {
+      if (data[(y * sw + x) * 4 + 3] > 8) {
+        if (x < minX) minX = x
+        if (y < minY) minY = y
+        if (x > maxX) maxX = x
+        if (y > maxY) maxY = y
+      }
+    }
+  }
+  const hasContent = maxX >= minX && maxY >= minY
+  const cropW = hasContent ? maxX - minX + 1 : sw
+  const cropH = hasContent ? maxY - minY + 1 : sh
+  const cropX = hasContent ? minX : 0
+  const cropY = hasContent ? minY : 0
+  const side = Math.max(cropW, cropH)
+  const pad = Math.round(side * 0.08)
+  const box = side + pad * 2
+
+  canvas.width = size
+  canvas.height = size
+  ctx.clearRect(0, 0, size, size)
+  const scale = size / box
+  const dx = (box - cropW) / 2
+  const dy = (box - cropH) / 2
+  ctx.imageSmoothingEnabled = true
+  ctx.imageSmoothingQuality = 'high'
+  ctx.drawImage(
+    img,
+    cropX,
+    cropY,
+    cropW,
+    cropH,
+    dx * scale,
+    dy * scale,
+    cropW * scale,
+    cropH * scale,
+  )
+  return canvas.toDataURL('image/png')
+}
+
+const prepareFaviconSvgDataUrl = (emoji) => {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text x="50" y="54" text-anchor="middle" dominant-baseline="middle" font-size="78">${emoji}</text></svg>`
+  return `data:image/svg+xml,${encodeURIComponent(svg)}`
+}
+
+const fetchFaviconSheetGlyph = async () => {
+  const response = await fetch(sheetCsvUrl('Favicon'))
+  if (!response.ok) throw new Error('Failed to load Favicon sheet')
+  const rows = parseCsv(await response.text())
+  if (rows.length < 2) return ''
+  // Prefer first non-header cell in column A (under "Favicon Icon")
+  for (const row of rows.slice(1)) {
+    const value = (row[0] || '').trim()
+    if (value) return value
+  }
+  return ''
+}
+
+const loadFaviconFromSheet = async () => {
+  try {
+    const response = await fetch(sheetXlsxUrl())
+    if (!response.ok) throw new Error('Failed to load workbook for favicon')
+    const zip = await JSZip.loadAsync(await response.arrayBuffer())
+    const sheetPath = await findSheetPath(zip, 'Favicon')
+    const drawingPath = await findDrawingPath(zip, sheetPath)
+    let imagePaths = drawingPath
+      ? await findIconImagePaths(zip, drawingPath)
+      : []
+
+    if (imagePaths.length) {
+      const path = imagePaths[0]
+      const file = zip.file(path)
+      if (file) {
+        const blob = await file.async('blob')
+        const type =
+          path.endsWith('.png')
+            ? 'image/png'
+            : path.endsWith('.jpg') || path.endsWith('.jpeg')
+              ? 'image/jpeg'
+              : path.endsWith('.webp')
+                ? 'image/webp'
+                : blob.type || 'image/png'
+        const url = URL.createObjectURL(new Blob([blob], { type }))
+        objectUrls.push(url)
+        const dataUrl = await prepareFaviconFromImageSrc(url, 128)
+        setFaviconFromSrc(dataUrl, 'image/png')
+        return
+      }
+    }
+
+    const glyph = await fetchFaviconSheetGlyph()
+    if (!glyph) return
+    if (/^https?:\/\//i.test(glyph)) {
+      const dataUrl = await prepareFaviconFromImageSrc(glyph, 128)
+      setFaviconFromSrc(dataUrl, 'image/png')
+      return
+    }
+    // Prefer SVG for emoji glyphs (crisp at all sizes), with PNG fallback set via canvas
+    setFaviconFromSrc(prepareFaviconSvgDataUrl(glyph), 'image/svg+xml')
+  } catch (error) {
+    console.error(error)
+  }
 }
 
 const iconScale = computed(() => (isMobile.value ? 0.5 : 1))
@@ -331,7 +470,6 @@ const loadIconsFromSheet = async () => {
   }
 
   helpers.value = loaded
-  if (loaded[0]) setFaviconFromSrc(loaded[0].src)
   await nextTick()
   placeHelpersInitially()
 }
@@ -512,7 +650,7 @@ onMounted(async () => {
   mobileMq.addEventListener('change', onMobileChange)
   window.addEventListener('resize', onStageLayoutChange)
   try {
-    await Promise.all([loadLists(), loadIconsFromSheet()])
+    await Promise.all([loadLists(), loadIconsFromSheet(), loadFaviconFromSheet()])
   } catch (error) {
     console.error(error)
   }
@@ -551,13 +689,7 @@ onUnmounted(() => {
           <ul class="space-y-1">
             <li class="max-md:mb-3">
               <div class="flex flex-wrap items-center gap-2">
-                <a
-                  v-if="contact.email"
-                  :href="`mailto:${contact.email}`"
-                  class="text-[#0000EE] underline"
-                >
-                  {{ contact.email }}
-                </a>
+                <span v-if="contact.email">{{ contact.email }}</span>
                 <a
                   v-if="contact.instagram"
                   :href="contact.instagram"
@@ -682,7 +814,7 @@ onUnmounted(() => {
         />
 
         <h1
-          class="absolute right-0 bottom-0 z-50 m-0 text-right font-['Times_New_Roman',Times,serif] text-[34px] leading-tight"
+          class="absolute right-0 bottom-0 z-50 m-0 text-right font-['Times_New_Roman',Times,serif] text-[34px] leading-none"
         >
           Sarah Fensom
         </h1>
