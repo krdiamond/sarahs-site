@@ -4,6 +4,10 @@ import JSZip from 'jszip'
 
 const SHEET_ID = '1PIcdiUt1_Yj9Mf1zErlEPObBl5Kg6W5Z3Qd5p54-WRE'
 const DEFAULT_ICON_WIDTH = 160
+const MOBILE_MQ = '(max-width: 767px)'
+const BIO_TEXT =
+  'Sarah Fensom is a film and arts journalist based in Los Angeles. With over 15 years of experience as a writer, she has contributed to the Los Angeles Times, American Cinematographer, BOMB, Sight and Sound, LA Review of Books, Film Comment, and a host of other publications. She is the co-writer and star of Lindsay Denniberg’s forthcoming film, Killer Makeover and a uniquely glamorous person.'
+
 const sheetCsvUrl = (sheetName) =>
   `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheetName)}`
 const sheetXlsxUrl = () =>
@@ -13,6 +17,8 @@ const events = ref([])
 const work = ref([])
 const helpers = ref([])
 const objectUrls = []
+const isMobile = ref(false)
+let mobileMq = null
 
 const parseCsv = (text) => {
   const rows = []
@@ -98,6 +104,17 @@ const loadLists = async () => {
   ])
   events.value = eventRows
   work.value = workRows
+}
+
+const fetchIconNames = async () => {
+  const response = await fetch(sheetCsvUrl('Icons'))
+  if (!response.ok) throw new Error('Failed to load Icons names')
+  const rows = parseCsv(await response.text())
+  if (rows.length < 2) return []
+  const headers = rows[0].map(normalizeKey)
+  const nameIdx = headers.indexOf('icon name')
+  if (nameIdx === -1) return []
+  return rows.slice(1).map((cols) => (cols[nameIdx] || '').trim())
 }
 
 const attr = (xml, name) => {
@@ -191,8 +208,29 @@ const findIconImagePaths = async (zip, drawingPath) => {
     .map((target) => resolveZipPath(drawingPath, target))
 }
 
+const setFaviconFromSrc = (src, type = 'image/png') => {
+  let link = document.querySelector("link[rel='icon']")
+  if (!link) {
+    link = document.createElement('link')
+    link.rel = 'icon'
+    document.head.appendChild(link)
+  }
+  link.type = type
+  link.href = src
+}
+
+const iconScale = computed(() => (isMobile.value ? 0.5 : 1))
+
+const displayWidth = (helper) =>
+  Math.round(helper.baseWidth * iconScale.value)
+const displayHeight = (helper) =>
+  Math.round(helper.baseHeight * iconScale.value)
+
 const loadIconsFromSheet = async () => {
-  const response = await fetch(sheetXlsxUrl())
+  const [iconNames, response] = await Promise.all([
+    fetchIconNames(),
+    fetch(sheetXlsxUrl()),
+  ])
   if (!response.ok) throw new Error('Failed to load Icons workbook')
   const zip = await JSZip.loadAsync(await response.arrayBuffer())
 
@@ -225,31 +263,27 @@ const loadIconsFromSheet = async () => {
     const url = URL.createObjectURL(new Blob([blob], { type }))
     objectUrls.push(url)
     const natural = await loadImageNaturalSize(url)
-    const width = DEFAULT_ICON_WIDTH
-    const height = Math.round((width * natural.height) / natural.width) || width
+    const baseWidth = DEFAULT_ICON_WIDTH
+    const baseHeight =
+      Math.round((baseWidth * natural.height) / natural.width) || baseWidth
+    const name = (iconNames[i] || '').trim()
     loaded.push({
       id: `icon-${i}-${path.split('/').pop()}`,
       src: url,
-      alt: `Icon ${i + 1}`,
-      width,
-      height,
+      alt: name || `Icon ${i + 1}`,
+      baseWidth,
+      baseHeight,
+      width: Math.round(baseWidth * iconScale.value),
+      height: Math.round(baseHeight * iconScale.value),
       x: 0,
       y: 0,
     })
   }
 
   helpers.value = loaded
+  if (loaded[0]) setFaviconFromSrc(loaded[0].src)
   await nextTick()
   placeHelpersInitially()
-}
-
-const hovering = ref(false)
-const pinned = ref(false)
-
-const showAbout = () => hovering.value || pinned.value
-
-const toggleAbout = () => {
-  pinned.value = !pinned.value
 }
 
 const stageRef = ref(null)
@@ -261,8 +295,12 @@ const clamp = (value, min, max) => Math.min(Math.max(value, min), max)
 const placeHelper = (helper, x, y) => {
   const stage = stageRef.value
   if (!stage) return
-  const maxX = Math.max(0, stage.clientWidth - helper.width)
-  const maxY = Math.max(0, stage.clientHeight - helper.height)
+  const width = displayWidth(helper)
+  const height = displayHeight(helper)
+  helper.width = width
+  helper.height = height
+  const maxX = Math.max(0, stage.clientWidth - width)
+  const maxY = Math.max(0, stage.clientHeight - height)
   helper.x = clamp(x, 0, maxX)
   helper.y = clamp(y, 0, maxY)
 }
@@ -280,23 +318,26 @@ const placeHelpersInitially = () => {
   const placed = []
 
   helpers.value.forEach((helper, index) => {
+    const width = displayWidth(helper)
+    const height = displayHeight(helper)
+
     if (index === 0) {
       placeHelper(
         helper,
-        (stage.clientWidth - helper.width) / 2,
-        (stage.clientHeight - helper.height) / 2,
+        (stage.clientWidth - width) / 2,
+        (stage.clientHeight - height) / 2,
       )
       placed.push({
         x: helper.x,
         y: helper.y,
-        width: helper.width,
-        height: helper.height,
+        width,
+        height,
       })
       return
     }
 
-    const maxX = Math.max(0, stage.clientWidth - helper.width)
-    const maxY = Math.max(0, stage.clientHeight - helper.height)
+    const maxX = Math.max(0, stage.clientWidth - width)
+    const maxY = Math.max(0, stage.clientHeight - height)
     let x = 0
     let y = 0
     let found = false
@@ -307,8 +348,8 @@ const placeHelpersInitially = () => {
       const candidate = {
         x,
         y,
-        width: helper.width,
-        height: helper.height,
+        width,
+        height,
       }
       if (!placed.some((rect) => rectsOverlap(candidate, rect))) {
         found = true
@@ -318,15 +359,15 @@ const placeHelpersInitially = () => {
 
     if (!found) {
       // Fallback: walk a coarse grid for the first non-overlapping slot
-      const stepX = Math.max(24, helper.width / 2)
-      const stepY = Math.max(24, helper.height / 2)
+      const stepX = Math.max(24, width / 2)
+      const stepY = Math.max(24, height / 2)
       outer: for (let gy = 0; gy <= maxY; gy += stepY) {
         for (let gx = 0; gx <= maxX; gx += stepX) {
           const candidate = {
             x: gx,
             y: gy,
-            width: helper.width,
-            height: helper.height,
+            width,
+            height,
           }
           if (!placed.some((rect) => rectsOverlap(candidate, rect))) {
             x = gx
@@ -342,8 +383,8 @@ const placeHelpersInitially = () => {
     placed.push({
       x: helper.x,
       y: helper.y,
-      width: helper.width,
-      height: helper.height,
+      width,
+      height,
     })
   })
 }
@@ -354,9 +395,14 @@ const clampHelpersToStage = () => {
   }
 }
 
+const onMobileChange = () => {
+  isMobile.value = mobileMq?.matches ?? false
+  clampHelpersToStage()
+}
+
 const helperStyle = (helper) => ({
-  width: `${helper.width}px`,
-  height: `${helper.height}px`,
+  width: `${displayWidth(helper)}px`,
+  height: `${displayHeight(helper)}px`,
   transform: `translate3d(${helper.x}px, ${helper.y}px, 0)`,
   zIndex: helper.z ?? 1,
 })
@@ -401,6 +447,9 @@ const onPointerUp = () => {
 const isDragging = computed(() => drag.value !== null)
 
 onMounted(async () => {
+  mobileMq = window.matchMedia(MOBILE_MQ)
+  isMobile.value = mobileMq.matches
+  mobileMq.addEventListener('change', onMobileChange)
   window.addEventListener('resize', clampHelpersToStage)
   try {
     await Promise.all([loadLists(), loadIconsFromSheet()])
@@ -410,23 +459,70 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  mobileMq?.removeEventListener('change', onMobileChange)
   window.removeEventListener('resize', clampHelpersToStage)
   for (const url of objectUrls) URL.revokeObjectURL(url)
 })
 </script>
 
 <template>
-  <div
+  <main
     class="flex h-dvh w-full overflow-hidden font-['Times_New_Roman',Times,serif] text-[12px] leading-normal"
   >
-    <!-- Left: gray; Events 1/5, Work 4/5 -->
+    <!-- Left: gray; Contact, Events 1/5, Work 4/5 -->
     <div class="flex h-full w-1/2 flex-col bg-neutral-200">
+      <section
+        class="shrink-0 overflow-hidden border-b border-black p-4"
+        aria-labelledby="contact-heading"
+      >
+        <h2 id="contact-heading" class="mb-3">Contact</h2>
+        <ul class="space-y-1">
+          <li class="max-md:mb-2">
+            <a
+              href="mailto:sefensom@gmail.com"
+              class="text-[#0000EE] underline"
+            >
+              sefensom@gmail.com
+            </a>
+          </li>
+          <li class="max-md:mb-2">
+            <p class="m-0">{{ BIO_TEXT }}</p>
+          </li>
+          <li class="max-md:mb-2">
+            <a
+              href="https://www.instagram.com/mycharades_grease2/"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="inline-flex items-center text-[#0000EE]"
+              aria-label="Instagram"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                width="16"
+                height="16"
+                fill="currentColor"
+                aria-hidden="true"
+                class="shrink-0"
+              >
+                <path
+                  d="M7 2h10a5 5 0 0 1 5 5v10a5 5 0 0 1-5 5H7a5 5 0 0 1-5-5V7a5 5 0 0 1 5-5zm0 2a3 3 0 0 0-3 3v10a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3V7a3 3 0 0 0-3-3H7zm5 3.5A4.5 4.5 0 1 1 7.5 12 4.5 4.5 0 0 1 12 7.5zm0 2A2.5 2.5 0 1 0 14.5 12 2.5 2.5 0 0 0 12 9.5zM17.75 6a1.25 1.25 0 1 1-1.25 1.25A1.25 1.25 0 0 1 17.75 6z"
+                />
+              </svg>
+            </a>
+          </li>
+        </ul>
+      </section>
       <section
         class="flex min-h-0 flex-[1] flex-col overflow-hidden border-b border-black p-4"
       >
         <h2 class="mb-3 shrink-0">Events</h2>
         <ul class="min-h-0 flex-1 space-y-1 overflow-y-auto">
-          <li v-for="item in events" :key="item.date + item.title">
+          <li
+            v-for="item in events"
+            :key="item.date + item.title"
+            class="max-md:mb-2"
+          >
             <a
               :href="item.url"
               target="_blank"
@@ -441,7 +537,11 @@ onUnmounted(() => {
       <section class="flex min-h-0 flex-[4] flex-col overflow-hidden p-4">
         <h2 class="mb-3 shrink-0">Work</h2>
         <ul class="min-h-0 flex-1 space-y-1 overflow-y-auto">
-          <li v-for="item in work" :key="item.date + item.title">
+          <li
+            v-for="item in work"
+            :key="item.date + item.title"
+            class="max-md:mb-2"
+          >
             <a
               :href="item.url"
               target="_blank"
@@ -461,18 +561,6 @@ onUnmounted(() => {
       class="relative h-full w-1/2 overflow-hidden bg-white"
       :class="isDragging ? 'select-none' : ''"
     >
-      <p
-        v-show="showAbout()"
-        class="pointer-events-none absolute top-4 right-4 left-4 z-50 text-right text-[12px] leading-normal"
-      >
-        Sarah Fensom is a film and arts journalist based in Los Angeles. With
-        over 15 years of experience as a writer, she has contributed to the Los
-        Angeles Times, American Cinematographer, BOMB, Sight and Sound, LA
-        Review of Books, Film Comment, and a host of other publications. She is
-        the co-writer and star of Lindsay Denniberg’s forthcoming film, Killer
-        Makeover and a uniquely glamorous person.
-      </p>
-
       <img
         v-for="helper in helpers"
         :key="helper.id"
@@ -490,16 +578,11 @@ onUnmounted(() => {
         @pointercancel="onPointerUp"
       />
 
-      <button
-        type="button"
-        class="absolute right-4 bottom-4 z-50 cursor-pointer border-0 bg-transparent p-0 text-right font-['Times_New_Roman',Times,serif] text-[34px] leading-tight"
-        :aria-expanded="showAbout()"
-        @mouseenter="hovering = true"
-        @mouseleave="hovering = false"
-        @click="toggleAbout"
+      <h1
+        class="absolute right-4 bottom-4 z-50 m-0 text-right font-['Times_New_Roman',Times,serif] text-[34px] leading-tight"
       >
         Sarah Fensom
-      </button>
+      </h1>
     </div>
-  </div>
+  </main>
 </template>
