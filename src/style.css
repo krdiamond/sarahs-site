@@ -19,3 +19,9 @@ body,
   width: 0;
   height: 0;
 }
+
+/* Stronger keyboard focus for links (WCAG focus appearance polish) */
+a:focus-visible {
+  outline: 2px solid #000;
+  outline-offset: 2px;
+}
