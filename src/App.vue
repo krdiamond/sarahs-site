@@ -690,7 +690,7 @@ onUnmounted(() => {
           class="min-h-0 flex-1 overflow-y-auto overscroll-contain"
         >
           <ul class="space-y-1">
-            <li class="max-md:mb-3">
+            <li class="max-md:mb-2">
               <div class="flex flex-wrap items-center gap-2">
                 <span v-if="contact.email">{{ contact.email }}</span>
                 <a
@@ -717,7 +717,7 @@ onUnmounted(() => {
                 </a>
               </div>
             </li>
-            <li v-if="contact.about" class="max-md:mb-3">
+            <li v-if="contact.about" class="max-md:mb-2">
               <p class="m-0">{{ contact.about }}</p>
             </li>
           </ul>
@@ -742,7 +742,7 @@ onUnmounted(() => {
           <li
             v-for="item in events"
             :key="item.date + item.title"
-            class="max-md:mb-3"
+            class="max-md:mb-2"
           >
             <a
               :href="item.url"
@@ -776,7 +776,7 @@ onUnmounted(() => {
           <li
             v-for="item in work"
             :key="item.date + item.title"
-            class="max-md:mb-3"
+            class="max-md:mb-2"
           >
             <a
               :href="item.url"
