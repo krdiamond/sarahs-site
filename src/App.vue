@@ -7,6 +7,8 @@ const DEFAULT_ICON_WIDTH = 160
 const MOBILE_MQ = '(max-width: 767px)'
 const BIO_TEXT =
   'Sarah Fensom is a film and arts journalist based in Los Angeles. With over 15 years of experience as a writer, she has contributed to the Los Angeles Times, American Cinematographer, BOMB, Sight and Sound, LA Review of Books, Film Comment, and a host of other publications. She is the co-writer and star of Lindsay Denniberg’s forthcoming film, Killer Makeover and a uniquely glamorous person.'
+const EVENTS_ERROR_MSG = 'Couldn’t load events — try refreshing'
+const WORK_ERROR_MSG = 'Couldn’t load works — try refreshing'
 
 const sheetCsvUrl = (sheetName) =>
   `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheetName)}`
@@ -15,6 +17,8 @@ const sheetXlsxUrl = () =>
 
 const events = ref([])
 const work = ref([])
+const eventsError = ref('')
+const workError = ref('')
 const helpers = ref([])
 const objectUrls = []
 const isMobile = ref(false)
@@ -98,24 +102,32 @@ const fetchSheet = async (sheetName, creditKeys) => {
 }
 
 const loadLists = async () => {
-  const [eventRows, workRows] = await Promise.all([
+  const [eventsResult, workResult] = await Promise.allSettled([
     fetchSheet('Events', ['location', 'publication']),
     fetchSheet('Work', ['publication', 'location']),
   ])
-  events.value = eventRows
-  work.value = workRows
+
+  if (eventsResult.status === 'fulfilled') {
+    events.value = eventsResult.value
+    eventsError.value = ''
+  } else {
+    events.value = []
+    eventsError.value = EVENTS_ERROR_MSG
+    console.error(eventsResult.reason)
+  }
+
+  if (workResult.status === 'fulfilled') {
+    work.value = workResult.value
+    workError.value = ''
+  } else {
+    work.value = []
+    workError.value = WORK_ERROR_MSG
+    console.error(workResult.reason)
+  }
 }
 
-const fetchIconNames = async () => {
-  const response = await fetch(sheetCsvUrl('Icons'))
-  if (!response.ok) throw new Error('Failed to load Icons names')
-  const rows = parseCsv(await response.text())
-  if (rows.length < 2) return []
-  const headers = rows[0].map(normalizeKey)
-  const nameIdx = headers.indexOf('icon name')
-  if (nameIdx === -1) return []
-  return rows.slice(1).map((cols) => (cols[nameIdx] || '').trim())
-}
+const listLinkLabel = (item) =>
+  `${item.date}: ${item.title} for ${item.credit} (opens in a new tab)`
 
 const attr = (xml, name) => {
   const match = xml.match(new RegExp(`${name}="([^"]+)"`))
@@ -227,10 +239,7 @@ const displayHeight = (helper) =>
   Math.round(helper.baseHeight * iconScale.value)
 
 const loadIconsFromSheet = async () => {
-  const [iconNames, response] = await Promise.all([
-    fetchIconNames(),
-    fetch(sheetXlsxUrl()),
-  ])
+  const response = await fetch(sheetXlsxUrl())
   if (!response.ok) throw new Error('Failed to load Icons workbook')
   const zip = await JSZip.loadAsync(await response.arrayBuffer())
 
@@ -266,17 +275,16 @@ const loadIconsFromSheet = async () => {
     const baseWidth = DEFAULT_ICON_WIDTH
     const baseHeight =
       Math.round((baseWidth * natural.height) / natural.width) || baseWidth
-    const name = (iconNames[i] || '').trim()
     loaded.push({
       id: `icon-${i}-${path.split('/').pop()}`,
       src: url,
-      alt: name || `Icon ${i + 1}`,
       baseWidth,
       baseHeight,
       width: Math.round(baseWidth * iconScale.value),
       height: Math.round(baseHeight * iconScale.value),
       x: 0,
       y: 0,
+      isPrimary: i === 0,
     })
   }
 
@@ -305,6 +313,19 @@ const placeHelper = (helper, x, y) => {
   helper.y = clamp(y, 0, maxY)
 }
 
+const centerPrimaryHelper = () => {
+  const stage = stageRef.value
+  const primary = helpers.value.find((helper) => helper.isPrimary) || helpers.value[0]
+  if (!stage || !primary) return
+  const width = displayWidth(primary)
+  const height = displayHeight(primary)
+  placeHelper(
+    primary,
+    (stage.clientWidth - width) / 2,
+    (stage.clientHeight - height) / 2,
+  )
+}
+
 const rectsOverlap = (a, b, gap = 8) =>
   a.x < b.x + b.width + gap &&
   a.x + a.width + gap > b.x &&
@@ -316,26 +337,22 @@ const placeHelpersInitially = () => {
   if (!stage || !helpers.value.length) return
 
   const placed = []
+  centerPrimaryHelper()
+  const primary = helpers.value.find((helper) => helper.isPrimary) || helpers.value[0]
+  if (primary) {
+    placed.push({
+      x: primary.x,
+      y: primary.y,
+      width: displayWidth(primary),
+      height: displayHeight(primary),
+    })
+  }
 
-  helpers.value.forEach((helper, index) => {
+  helpers.value.forEach((helper) => {
+    if (helper.isPrimary || helper === primary) return
+
     const width = displayWidth(helper)
     const height = displayHeight(helper)
-
-    if (index === 0) {
-      placeHelper(
-        helper,
-        (stage.clientWidth - width) / 2,
-        (stage.clientHeight - height) / 2,
-      )
-      placed.push({
-        x: helper.x,
-        y: helper.y,
-        width,
-        height,
-      })
-      return
-    }
-
     const maxX = Math.max(0, stage.clientWidth - width)
     const maxY = Math.max(0, stage.clientHeight - height)
     let x = 0
@@ -358,7 +375,6 @@ const placeHelpersInitially = () => {
     }
 
     if (!found) {
-      // Fallback: walk a coarse grid for the first non-overlapping slot
       const stepX = Math.max(24, width / 2)
       const stepY = Math.max(24, height / 2)
       outer: for (let gy = 0; gy <= maxY; gy += stepY) {
@@ -389,15 +405,17 @@ const placeHelpersInitially = () => {
   })
 }
 
-const clampHelpersToStage = () => {
+const onStageLayoutChange = () => {
+  centerPrimaryHelper()
   for (const helper of helpers.value) {
+    if (helper.isPrimary) continue
     placeHelper(helper, helper.x, helper.y)
   }
 }
 
 const onMobileChange = () => {
   isMobile.value = mobileMq?.matches ?? false
-  clampHelpersToStage()
+  onStageLayoutChange()
 }
 
 const helperStyle = (helper) => ({
@@ -408,6 +426,7 @@ const helperStyle = (helper) => ({
 })
 
 const onPointerDown = (event, helper) => {
+  if (helper.isPrimary) return
   if (event.button !== 0) return
   event.preventDefault()
   const stage = stageRef.value
@@ -430,7 +449,7 @@ const onPointerMove = (event) => {
   const stage = stageRef.value
   if (!stage) return
   const helper = helpers.value.find((item) => item.id === drag.value.id)
-  if (!helper) return
+  if (!helper || helper.isPrimary) return
 
   const rect = stage.getBoundingClientRect()
   placeHelper(
@@ -450,7 +469,7 @@ onMounted(async () => {
   mobileMq = window.matchMedia(MOBILE_MQ)
   isMobile.value = mobileMq.matches
   mobileMq.addEventListener('change', onMobileChange)
-  window.addEventListener('resize', clampHelpersToStage)
+  window.addEventListener('resize', onStageLayoutChange)
   try {
     await Promise.all([loadLists(), loadIconsFromSheet()])
   } catch (error) {
@@ -460,7 +479,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   mobileMq?.removeEventListener('change', onMobileChange)
-  window.removeEventListener('resize', clampHelpersToStage)
+  window.removeEventListener('resize', onStageLayoutChange)
   for (const url of objectUrls) URL.revokeObjectURL(url)
 })
 </script>
@@ -469,10 +488,10 @@ onUnmounted(() => {
   <main
     class="flex h-dvh w-full overflow-hidden font-['Times_New_Roman',Times,serif] text-[12px] leading-normal"
   >
-    <!-- Left: gray; Contact, Events 1/5, Work 4/5 -->
-    <div class="flex h-full w-1/2 flex-col bg-neutral-200">
+    <!-- Left: gray; Contact, Events, Work — shared scroll pattern -->
+    <div class="flex h-full min-h-0 w-1/2 flex-col bg-neutral-200">
       <section
-        class="shrink-0 overflow-hidden border-b border-black p-4"
+        class="max-h-[40%] shrink-0 overflow-y-auto border-b border-black p-4"
         aria-labelledby="contact-heading"
       >
         <h2 id="contact-heading" class="mb-3">Contact</h2>
@@ -493,8 +512,8 @@ onUnmounted(() => {
               href="https://www.instagram.com/mycharades_grease2/"
               target="_blank"
               rel="noopener noreferrer"
-              class="inline-flex items-center text-[#0000EE]"
-              aria-label="Instagram"
+              class="inline-flex min-h-6 min-w-6 items-center text-[#0000EE]"
+              aria-label="Instagram (opens in a new tab)"
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -514,10 +533,21 @@ onUnmounted(() => {
         </ul>
       </section>
       <section
-        class="flex min-h-0 flex-[1] flex-col overflow-hidden border-b border-black p-4"
+        class="flex min-h-0 flex-[1_1_0%] flex-col overflow-hidden border-b border-black p-4"
       >
         <h2 class="mb-3 shrink-0">Events</h2>
-        <ul class="min-h-0 flex-1 space-y-1 overflow-y-auto">
+        <p
+          v-if="eventsError"
+          class="m-0 min-h-0 flex-1 overflow-y-auto"
+          role="status"
+          aria-live="polite"
+        >
+          {{ eventsError }}
+        </p>
+        <ul
+          v-else
+          class="min-h-0 flex-1 space-y-0 overflow-y-auto overscroll-contain"
+        >
           <li
             v-for="item in events"
             :key="item.date + item.title"
@@ -527,16 +557,30 @@ onUnmounted(() => {
               :href="item.url"
               target="_blank"
               rel="noopener noreferrer"
-              class="text-[#0000EE] underline"
+              class="block min-h-6 leading-6 text-[#0000EE] underline"
+              :aria-label="listLinkLabel(item)"
             >
               {{ item.date }}: {{ item.title }} <i>for {{ item.credit }}</i>
             </a>
           </li>
         </ul>
       </section>
-      <section class="flex min-h-0 flex-[4] flex-col overflow-hidden p-4">
+      <section
+        class="flex min-h-0 flex-[4_1_0%] flex-col overflow-hidden p-4"
+      >
         <h2 class="mb-3 shrink-0">Work</h2>
-        <ul class="min-h-0 flex-1 space-y-1 overflow-y-auto">
+        <p
+          v-if="workError"
+          class="m-0 min-h-0 flex-1 overflow-y-auto"
+          role="status"
+          aria-live="polite"
+        >
+          {{ workError }}
+        </p>
+        <ul
+          v-else
+          class="min-h-0 flex-1 space-y-0 overflow-y-auto overscroll-contain"
+        >
           <li
             v-for="item in work"
             :key="item.date + item.title"
@@ -546,7 +590,8 @@ onUnmounted(() => {
               :href="item.url"
               target="_blank"
               rel="noopener noreferrer"
-              class="text-[#0000EE] underline"
+              class="block min-h-6 leading-6 text-[#0000EE] underline"
+              :aria-label="listLinkLabel(item)"
             >
               {{ item.date }}: {{ item.title }} <i>for {{ item.credit }}</i>
             </a>
@@ -565,11 +610,16 @@ onUnmounted(() => {
         v-for="helper in helpers"
         :key="helper.id"
         :src="helper.src"
-        :alt="helper.alt"
+        alt=""
+        aria-hidden="true"
         :style="helperStyle(helper)"
         class="absolute top-0 left-0 block touch-none select-none"
         :class="
-          drag?.id === helper.id ? 'cursor-grabbing' : 'cursor-grab'
+          helper.isPrimary
+            ? 'cursor-default'
+            : drag?.id === helper.id
+              ? 'cursor-grabbing'
+              : 'cursor-grab'
         "
         draggable="false"
         @pointerdown="onPointerDown($event, helper)"
