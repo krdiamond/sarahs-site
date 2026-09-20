@@ -670,10 +670,8 @@ onUnmounted(() => {
     id="main-content"
     class="flex h-dvh w-full overflow-hidden font-['Times_New_Roman',Times,serif] text-[12px] leading-normal"
   >
-    <!-- Left: gray; Contact 1/4, Events 1/4, Work 1/2. Mobile: 2/3 width -->
-    <div
-      class="flex h-full min-h-0 w-2/3 flex-col bg-neutral-200 md:w-1/2"
-    >
+    <!-- Left: gray; Contact 1/4, Events 1/4, Work 1/2 -->
+    <div class="flex h-full min-h-0 w-1/2 flex-col bg-neutral-200">
       <section
         class="flex min-h-0 flex-[1_1_0%] flex-col overflow-hidden border-b border-black p-4"
         aria-labelledby="contact-heading"
@@ -795,8 +793,8 @@ onUnmounted(() => {
       </section>
     </div>
 
-    <!-- Right: white stage. Mobile: 1/3 width. Icons are decorative play only. -->
-    <div class="relative h-full w-1/3 overflow-hidden bg-white p-4 md:w-1/2">
+    <!-- Right: white stage. Icons are decorative play only. -->
+    <div class="relative h-full w-1/2 overflow-hidden bg-white p-4">
       <div
         ref="stageRef"
         class="relative h-full w-full overflow-hidden"
