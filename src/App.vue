@@ -17,9 +17,15 @@ const sheetXlsxUrl = () =>
 const events = ref([])
 const work = ref([])
 const contact = ref({
+  name: '',
+  jobTitle: '',
+  url: '',
   about: '',
   email: '',
   instagram: '',
+  addressLocality: '',
+  addressRegion: '',
+  addressCountry: '',
 })
 const eventsError = ref('')
 const workError = ref('')
@@ -28,6 +34,23 @@ const helpers = ref([])
 const objectUrls = []
 const isMobile = ref(false)
 let mobileMq = null
+
+const contactEmailDisplay = computed(() =>
+  (contact.value.email || '').replace(/^mailto:/i, '').trim(),
+)
+
+const isUsableSiteUrl = (value) => {
+  const v = (value || '').trim()
+  if (!v) return false
+  if (/^n\/?a\b/i.test(v)) return false
+  if (/for now/i.test(v)) return false
+  try {
+    const url = new URL(v)
+    return url.protocol === 'http:' || url.protocol === 'https:'
+  } catch {
+    return false
+  }
+}
 
 const parseCsv = (text) => {
   const rows = []
@@ -127,9 +150,17 @@ const fetchContactSheet = async () => {
   }
 
   return {
+    name: fields.name || '',
+    jobTitle: fields['job title'] || '',
+    url: fields.url || '',
     about: fields.about || '',
     email: fields.email || '',
     instagram: fields.instagram || '',
+    // Sheet currently uses typo "Adress Locality"; accept both.
+    addressLocality:
+      fields['address locality'] || fields['adress locality'] || '',
+    addressRegion: fields['address region'] || '',
+    addressCountry: fields['address country'] || '',
   }
 }
 
@@ -138,13 +169,64 @@ const setMetaContent = (selector, content, attr = 'content') => {
   if (el && content) el.setAttribute(attr, content)
 }
 
-/** Keep description meta in sync when Contact sheet About text changes. */
+const syncPersonJsonLd = () => {
+  const c = contact.value
+  const person = {
+    '@context': 'https://schema.org',
+    '@type': 'Person',
+  }
+
+  if (c.name) person.name = c.name
+  if (c.jobTitle) person.jobTitle = c.jobTitle
+  if (c.about) person.description = c.about
+  if (isUsableSiteUrl(c.url)) person.url = c.url.replace(/\/?$/, '/')
+
+  const email = (c.email || '').trim()
+  if (email) {
+    person.email = /^mailto:/i.test(email) ? email : `mailto:${email}`
+  }
+
+  if (c.instagram) person.sameAs = [c.instagram]
+
+  if (c.addressLocality || c.addressRegion || c.addressCountry) {
+    person.address = { '@type': 'PostalAddress' }
+    if (c.addressLocality) person.address.addressLocality = c.addressLocality
+    if (c.addressRegion) person.address.addressRegion = c.addressRegion
+    if (c.addressCountry) person.address.addressCountry = c.addressCountry
+  }
+
+  let script = document.getElementById('person-jsonld')
+  if (!script) {
+    script = document.createElement('script')
+    script.type = 'application/ld+json'
+    script.id = 'person-jsonld'
+    document.head.appendChild(script)
+  }
+  script.textContent = JSON.stringify(person)
+}
+
+/** Keep description meta / JSON-LD in sync with Contact sheet. */
 const syncSeoFromContact = () => {
   const about = (contact.value.about || '').trim()
-  if (!about) return
-  setMetaContent('meta[name="description"]', about)
-  setMetaContent('meta[property="og:description"]', about)
-  setMetaContent('meta[name="twitter:description"]', about)
+  if (about) {
+    setMetaContent('meta[name="description"]', about)
+    setMetaContent('meta[property="og:description"]', about)
+    setMetaContent('meta[name="twitter:description"]', about)
+  }
+
+  if (contact.value.name && contact.value.jobTitle) {
+    const title = `${contact.value.name} — ${contact.value.jobTitle}`
+    document.title = title
+    setMetaContent('meta[property="og:title"]', title)
+    setMetaContent('meta[name="twitter:title"]', title)
+  }
+
+  if (isUsableSiteUrl(contact.value.url)) {
+    const url = contact.value.url.replace(/\/?$/, '/')
+    setMetaContent('meta[property="og:url"]', url)
+  }
+
+  syncPersonJsonLd()
 }
 
 const loadLists = async () => {
@@ -177,7 +259,17 @@ const loadLists = async () => {
     contactError.value = ''
     syncSeoFromContact()
   } else {
-    contact.value = { about: '', email: '', instagram: '' }
+    contact.value = {
+      name: '',
+      jobTitle: '',
+      url: '',
+      about: '',
+      email: '',
+      instagram: '',
+      addressLocality: '',
+      addressRegion: '',
+      addressCountry: '',
+    }
     contactError.value = CONTACT_ERROR_MSG
     console.error(contactResult.reason)
   }
@@ -707,7 +799,7 @@ onUnmounted(() => {
           <ul class="space-y-1">
             <li class="max-md:mb-2">
               <div class="flex flex-wrap items-center gap-2">
-                <span v-if="contact.email">{{ contact.email }}</span>
+                <span v-if="contactEmailDisplay">{{ contactEmailDisplay }}</span>
                 <a
                   v-if="contact.instagram"
                   :href="contact.instagram"
