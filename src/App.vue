@@ -133,6 +133,20 @@ const fetchContactSheet = async () => {
   }
 }
 
+const setMetaContent = (selector, content, attr = 'content') => {
+  const el = document.querySelector(selector)
+  if (el && content) el.setAttribute(attr, content)
+}
+
+/** Keep description meta in sync when Contact sheet About text changes. */
+const syncSeoFromContact = () => {
+  const about = (contact.value.about || '').trim()
+  if (!about) return
+  setMetaContent('meta[name="description"]', about)
+  setMetaContent('meta[property="og:description"]', about)
+  setMetaContent('meta[name="twitter:description"]', about)
+}
+
 const loadLists = async () => {
   const [eventsResult, workResult, contactResult] = await Promise.allSettled([
     fetchSheet('Events', ['location', 'publication']),
@@ -161,6 +175,7 @@ const loadLists = async () => {
   if (contactResult.status === 'fulfilled') {
     contact.value = contactResult.value
     contactError.value = ''
+    syncSeoFromContact()
   } else {
     contact.value = { about: '', email: '', instagram: '' }
     contactError.value = CONTACT_ERROR_MSG
