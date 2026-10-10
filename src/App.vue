@@ -800,32 +800,31 @@ onUnmounted(() => {
           class="min-h-0 flex-1 overflow-y-auto overscroll-contain"
         >
           <ul class="space-y-1">
-            <li class="max-md:mb-2">
-              <div class="flex flex-wrap items-center gap-2">
-                <span v-if="contactEmailDisplay">{{ contactEmailDisplay }}</span>
-                <a
-                  v-if="contact.instagram"
-                  :href="contact.instagram"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  class="inline-flex min-h-6 min-w-6 items-center text-[#0000EE]"
-                  aria-label="Instagram (opens in a new tab)"
+            <li v-if="contact.instagram" class="max-md:mb-2">
+              <a
+                :href="contact.instagram"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="inline-flex min-h-6 min-w-6 items-center text-[#0000EE]"
+                aria-label="Instagram (opens in a new tab)"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  width="16"
+                  height="16"
+                  fill="currentColor"
+                  aria-hidden="true"
+                  class="shrink-0"
                 >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    viewBox="0 0 24 24"
-                    width="16"
-                    height="16"
-                    fill="currentColor"
-                    aria-hidden="true"
-                    class="shrink-0"
-                  >
-                    <path
-                      d="M7 2h10a5 5 0 0 1 5 5v10a5 5 0 0 1-5 5H7a5 5 0 0 1-5-5V7a5 5 0 0 1 5-5zm0 2a3 3 0 0 0-3 3v10a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3V7a3 3 0 0 0-3-3H7zm5 3.5A4.5 4.5 0 1 1 7.5 12 4.5 4.5 0 0 1 12 7.5zm0 2A2.5 2.5 0 1 0 14.5 12 2.5 2.5 0 0 0 12 9.5zM17.75 6a1.25 1.25 0 1 1-1.25 1.25A1.25 1.25 0 0 1 17.75 6z"
-                    />
-                  </svg>
-                </a>
-              </div>
+                  <path
+                    d="M7 2h10a5 5 0 0 1 5 5v10a5 5 0 0 1-5 5H7a5 5 0 0 1-5-5V7a5 5 0 0 1 5-5zm0 2a3 3 0 0 0-3 3v10a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3V7a3 3 0 0 0-3-3H7zm5 3.5A4.5 4.5 0 1 1 7.5 12 4.5 4.5 0 0 1 12 7.5zm0 2A2.5 2.5 0 1 0 14.5 12 2.5 2.5 0 0 0 12 9.5zM17.75 6a1.25 1.25 0 1 1-1.25 1.25A1.25 1.25 0 0 1 17.75 6z"
+                  />
+                </svg>
+              </a>
+            </li>
+            <li v-if="contactEmailDisplay" class="max-md:mb-2">
+              <span>{{ contactEmailDisplay }}</span>
             </li>
             <li v-if="contact.about" class="max-md:mb-2">
               <p class="m-0">{{ contact.about }}</p>
