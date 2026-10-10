@@ -275,8 +275,11 @@ const loadLists = async () => {
   }
 }
 
-const listLinkLabel = (item) =>
-  `${item.date}: ${item.title} for ${item.credit} (opens in a new tab)`
+const listLinkLabel = (item) => {
+  const credit = (item.credit || '').trim()
+  const creditPart = credit ? ` for ${credit}` : ''
+  return `${item.date}: ${item.title}${creditPart} (opens in a new tab)`
+}
 
 const attr = (xml, name) => {
   const match = xml.match(new RegExp(`${name}="([^"]+)"`))
@@ -858,8 +861,10 @@ onUnmounted(() => {
               class="block min-h-6 leading-6 text-[#0000EE] underline"
               :aria-label="listLinkLabel(item)"
             >
-              {{ item.date }}: {{ item.title }}
-              <span class="italic">for {{ item.credit }}</span>
+              {{ item.date }}: {{ item.title }}<span
+                v-if="(item.credit || '').trim()"
+                class="italic"
+              > for {{ item.credit.trim() }}</span>
             </a>
           </li>
         </ul>
@@ -892,8 +897,10 @@ onUnmounted(() => {
               class="block min-h-6 leading-6 text-[#0000EE] underline"
               :aria-label="listLinkLabel(item)"
             >
-              {{ item.date }}: {{ item.title }}
-              <span class="italic">for {{ item.credit }}</span>
+              {{ item.date }}: {{ item.title }}<span
+                v-if="(item.credit || '').trim()"
+                class="italic"
+              > for {{ item.credit.trim() }}</span>
             </a>
           </li>
         </ul>
