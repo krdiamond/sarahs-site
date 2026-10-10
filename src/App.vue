@@ -778,11 +778,11 @@ onUnmounted(() => {
   <a href="#main-content" class="sr-only">Skip to content</a>
   <main
     id="main-content"
-    class="flex h-dvh w-full overflow-hidden font-['Times_New_Roman',Times,serif] text-[12px] leading-normal max-[450px]:flex-col"
+    class="flex h-dvh w-full overflow-hidden font-['Times_New_Roman',Times,serif] text-[12px] leading-normal"
   >
-    <!-- Left: gray; Contact 1/4, Events 1/4, Work 1/2. ≤450px: full-width stack. -->
+    <!-- Left: gray; Contact 1/4, Events 1/4, Work 1/2 -->
     <div
-      class="flex h-full min-h-0 w-1/2 flex-col bg-neutral-200 max-[450px]:h-auto max-[450px]:w-full max-[450px]:min-h-0 max-[450px]:flex-1"
+      class="flex h-full min-h-0 w-1/2 flex-col bg-neutral-200 max-[450px]:w-full"
     >
       <section
         class="flex min-h-0 flex-[1_1_0%] flex-col overflow-hidden border-b border-black p-4"
@@ -908,10 +908,8 @@ onUnmounted(() => {
       </section>
     </div>
 
-    <!-- Right: white stage. Icons are decorative play only. ≤450px: full-width under lists. -->
-    <div
-      class="relative h-full w-1/2 overflow-hidden bg-white p-4 max-[450px]:h-auto max-[450px]:w-full max-[450px]:min-h-0 max-[450px]:flex-1"
-    >
+    <!-- Right: white stage. Icons are decorative play only. -->
+    <div class="relative h-full w-1/2 overflow-hidden bg-white p-4">
       <div
         ref="stageRef"
         class="relative h-full w-full overflow-hidden"
