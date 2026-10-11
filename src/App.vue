@@ -1,5 +1,5 @@
 <script setup>
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 import JSZip from 'jszip'
 
 const SHEET_ID = '1PIcdiUt1_Yj9Mf1zErlEPObBl5Kg6W5Z3Qd5p54-WRE'
@@ -48,59 +48,70 @@ const helpers = ref([])
 const objectUrls = []
 const isMobile = ref(false)
 const isNarrow = ref(false)
-/** True once marquee images are decoded so CSS -50% loop stays seamless. */
-const marqueeReady = ref(false)
+/**
+ * Marquee mounts once after icons+contact settle. Frozen sequence/duration
+ * prevent Vue remounts or --marquee-duration updates from restarting CSS
+ * animation (the prior “glitch after a while”).
+ */
+const marqueeMounted = ref(false)
+const marqueeSequence = ref([])
+const marqueeDurationFrozen = ref(MARQUEE_BASE_SECONDS)
 let mobileMq = null
 let narrowMq = null
 
-/** H1, icon1, H1, icon2, … for the ≤450px marquee. */
-const marqueeItems = computed(() => {
+const marqueeIconSize = (helper) => {
+  const height = 80
+  const ratio =
+    helper.baseHeight > 0 ? helper.baseWidth / helper.baseHeight : 1
+  return {
+    width: Math.max(1, Math.round(height * ratio)),
+    height,
+  }
+}
+
+/** Snapshot H1↔icon sequence with explicit px sizes (identical in both copies). */
+const buildMarqueeSequence = () => {
   const icons = helpers.value
   if (!icons.length) {
     return [{ type: 'h1', key: 'h1-solo' }]
   }
   const items = []
   icons.forEach((helper, index) => {
+    const size = marqueeIconSize(helper)
     items.push({ type: 'h1', key: `h1-${index}` })
-    items.push({ type: 'icon', key: `icon-${helper.id}`, helper })
+    items.push({
+      type: 'icon',
+      key: `icon-${helper.id}`,
+      src: helper.src,
+      width: size.width,
+      height: size.height,
+    })
   })
   return items
-})
-
-/** Unitless speed multiplier from Contact sheet → CSS duration. */
-const marqueeDurationSeconds = computed(() => {
-  const speed = contact.value.marqueeSpeed
-  const safe = Number.isFinite(speed) && speed > 0 ? speed : 1
-  return MARQUEE_BASE_SECONDS / safe
-})
-
-const preloadMarqueeImages = async (icons) => {
-  marqueeReady.value = false
-  if (!icons.length) {
-    marqueeReady.value = true
-    return
-  }
-  await Promise.all(
-    icons.map(
-      (helper) =>
-        new Promise((resolve) => {
-          const img = new Image()
-          img.onload = resolve
-          img.onerror = resolve
-          img.src = helper.src
-        }),
-    ),
-  )
-  marqueeReady.value = true
 }
 
-watch(
-  helpers,
-  (icons) => {
-    preloadMarqueeImages(icons)
-  },
-  { immediate: true },
-)
+const preloadImage = (src) =>
+  new Promise((resolve) => {
+    const img = new Image()
+    img.onload = resolve
+    img.onerror = resolve
+    img.src = src
+  })
+
+/** Build + mount marquee DOM once; never remount or retarget duration. */
+const prepareMarqueeOnce = async () => {
+  if (marqueeMounted.value) return
+
+  const icons = helpers.value
+  await Promise.all(icons.map((helper) => preloadImage(helper.src)))
+
+  const speed = contact.value.marqueeSpeed
+  const safe = Number.isFinite(speed) && speed > 0 ? speed : 1
+  marqueeDurationFrozen.value = MARQUEE_BASE_SECONDS / safe
+  marqueeSequence.value = buildMarqueeSequence()
+  await nextTick()
+  marqueeMounted.value = true
+}
 
 const contactEmailDisplay = computed(() =>
   (contact.value.email || '').replace(/^mailto:/i, '').trim(),
@@ -857,6 +868,8 @@ onMounted(async () => {
   } catch (error) {
     console.error(error)
   }
+  // Mount marquee only after sheet data is settled so CSS animation never restarts.
+  await prepareMarqueeOnce()
 })
 
 onUnmounted(() => {
@@ -882,7 +895,12 @@ onUnmounted(() => {
         class="flex min-h-0 flex-[1_1_0%] flex-col overflow-hidden border-b border-black p-4"
         aria-labelledby="contact-heading"
       >
-        <h2 id="contact-heading" class="mb-3 shrink-0 font-bold">Contact</h2>
+        <h2
+          id="contact-heading"
+          class="mb-3 shrink-0 font-bold max-[450px]:mb-[3px]"
+        >
+          Contact
+        </h2>
         <p
           v-if="contactError"
           class="m-0 min-h-0 flex-1 overflow-y-auto overscroll-contain"
@@ -936,7 +954,7 @@ onUnmounted(() => {
       <section
         class="flex min-h-0 flex-[1_1_0%] flex-col overflow-hidden border-b border-black p-4"
       >
-        <h2 class="mb-3 shrink-0 font-bold">Events</h2>
+        <h2 class="mb-3 shrink-0 font-bold max-[450px]:mb-[3px]">Events</h2>
         <p
           v-if="eventsError"
           class="m-0 min-h-0 flex-1 overflow-y-auto"
@@ -972,7 +990,7 @@ onUnmounted(() => {
       <section
         class="flex min-h-0 flex-[2_1_0%] flex-col overflow-hidden p-4"
       >
-        <h2 class="mb-3 shrink-0 font-bold">Work</h2>
+        <h2 class="mb-3 shrink-0 font-bold max-[450px]:mb-[3px]">Work</h2>
         <p
           v-if="workError"
           class="m-0 min-h-0 flex-1 overflow-y-auto"
@@ -1043,38 +1061,66 @@ onUnmounted(() => {
         </h1>
       </div>
 
-      <!-- ≤450px: SR title + CSS-only dual-copy marquee (no JS motion) -->
+      <!-- ≤450px: SR title + CSS-only dual-copy marquee (mounted once; no JS motion) -->
       <div class="hidden h-full w-full max-[450px]:flex max-[450px]:flex-col">
         <h1 class="sr-only">{{ SITE_TITLE }}</h1>
         <div
-          class="flex min-h-0 flex-1 items-center overflow-hidden"
+          class="marquee-viewport flex min-h-0 flex-1 items-center overflow-hidden"
           aria-hidden="true"
         >
           <div
+            v-if="marqueeMounted"
             class="marquee-track"
-            :class="{ 'marquee-track--ready': marqueeReady }"
-            :style="{ '--marquee-duration': `${marqueeDurationSeconds}s` }"
+            :style="{ '--marquee-duration': `${marqueeDurationFrozen}s` }"
           >
-            <div
-              v-for="copy in 2"
-              :key="'marquee-copy-' + copy"
-              class="marquee-group"
-            >
+            <div class="marquee-group">
               <template
-                v-for="item in marqueeItems"
-                :key="`copy-${copy}-${item.key}`"
+                v-for="item in marqueeSequence"
+                :key="`a-${item.key}`"
               >
                 <span
                   v-if="item.type === 'h1'"
-                  class="shrink-0 font-['Times_New_Roman',Times,serif] text-[32px] leading-none whitespace-nowrap"
+                  class="marquee-item shrink-0 font-['Times_New_Roman',Times,serif] text-[32px] leading-none whitespace-nowrap"
                 >
                   {{ SITE_TITLE }}
                 </span>
                 <img
                   v-else
-                  :src="item.helper.src"
+                  :src="item.src"
                   alt=""
-                  class="block h-[80px] w-auto shrink-0 select-none"
+                  :width="item.width"
+                  :height="item.height"
+                  class="marquee-item block shrink-0 select-none"
+                  :style="{
+                    width: `${item.width}px`,
+                    height: `${item.height}px`,
+                  }"
+                  draggable="false"
+                />
+              </template>
+            </div>
+            <div class="marquee-group" aria-hidden="true">
+              <template
+                v-for="item in marqueeSequence"
+                :key="`b-${item.key}`"
+              >
+                <span
+                  v-if="item.type === 'h1'"
+                  class="marquee-item shrink-0 font-['Times_New_Roman',Times,serif] text-[32px] leading-none whitespace-nowrap"
+                >
+                  {{ SITE_TITLE }}
+                </span>
+                <img
+                  v-else
+                  :src="item.src"
+                  alt=""
+                  :width="item.width"
+                  :height="item.height"
+                  class="marquee-item block shrink-0 select-none"
+                  :style="{
+                    width: `${item.width}px`,
+                    height: `${item.height}px`,
+                  }"
                   draggable="false"
                 />
               </template>
