@@ -840,7 +840,7 @@ onUnmounted(() => {
           <ul class="space-y-1">
             <li
               v-if="contact.instagram || contactEmailDisplay"
-              class="flex flex-col gap-1 max-md:mb-2 max-[450px]:flex-row max-[450px]:items-center max-[450px]:justify-between max-[450px]:gap-0"
+              class="flex flex-col gap-1 max-md:mb-2 max-[450px]:mb-[3px] max-[450px]:flex-row max-[450px]:items-center max-[450px]:justify-between max-[450px]:gap-0"
             >
               <a
                 v-if="contact.instagram"
@@ -869,7 +869,7 @@ onUnmounted(() => {
                 class="max-[450px]:order-1"
               >{{ contactEmailDisplay }}</span>
             </li>
-            <li v-if="contact.about" class="max-md:mb-2">
+            <li v-if="contact.about" class="max-md:mb-2 max-[450px]:mb-[3px]">
               <p class="m-0">{{ contact.about }}</p>
             </li>
           </ul>
@@ -894,7 +894,7 @@ onUnmounted(() => {
           <li
             v-for="item in events"
             :key="item.date + item.title"
-            class="max-md:mb-2"
+            class="max-md:mb-2 max-[450px]:mb-[3px]"
           >
             <a
               :href="item.url"
@@ -930,7 +930,7 @@ onUnmounted(() => {
           <li
             v-for="item in work"
             :key="item.date + item.title"
-            class="max-md:mb-2"
+            class="max-md:mb-2 max-[450px]:mb-[3px]"
           >
             <a
               :href="item.url"
