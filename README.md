@@ -1,5 +1,21 @@
-# Vue 3 + Vite
+# Sarah Fensom
 
-This template should help get you started developing with Vue 3 in Vite. The template uses Vue 3 `<script setup>` SFCs, check out the [script setup docs](https://v3.vuejs.org/api/sfc-script-setup.html#sfc-script-setup) to learn more.
+Personal site for film & arts journalist Sarah Fensom.
 
-Learn more about IDE Support for Vue in the [Vue Docs Scaling up Guide](https://vuejs.org/guide/scaling-up/tooling.html#ide-support).
+- **Live (after launch):** https://sarahfensom.com/
+- **GitHub Pages:** https://krdiamond.github.io/sarahs-site/ (redirects once the custom domain is configured)
+
+## Develop
+
+```bash
+npm install
+npm run dev
+```
+
+## Build
+
+```bash
+npm run build
+```
+
+Built assets go to `dist/` and are deployed by `.github/workflows/deploy-pages.yml` on pushes to `main`.
