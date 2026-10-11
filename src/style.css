@@ -27,11 +27,10 @@ a:focus-visible {
 }
 
 /*
-  ≤450px marquee — CSS/HTML only for motion.
+  ≤450px marquee — pure HTML/CSS island (injected once via v-once + v-html).
   Structure: .marquee-viewport > .marquee-track > (.marquee-group × 2)
-  Both groups are identical width; track animates exactly -50% of itself.
-  Trailing margin on each item equals the inter-item gap so the seam between
-  copy1→copy2 matches copy2→copy1 when the loop restarts.
+  Both groups identical width; track animates exactly -50% of itself.
+  Trailing margin on each item = seam spacing between copies.
 */
 @keyframes marquee-scroll {
   from {
@@ -61,6 +60,19 @@ a:focus-visible {
 .marquee-item {
   flex-shrink: 0;
   margin-inline-end: 1.5rem;
+}
+
+.marquee-group > span.marquee-item {
+  font-family: 'Times New Roman', Times, serif;
+  font-size: 32px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.marquee-group > img.marquee-item {
+  display: block;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
