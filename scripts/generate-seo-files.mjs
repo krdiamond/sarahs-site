@@ -3,7 +3,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const SHEET_ID = '1PIcdiUt1_Yj9Mf1zErlEPObBl5Kg6W5Z3Qd5p54-WRE'
-const CONTACT_CSV = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=Contact`
+const CONTACT_CSV = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=Contact&headers=0&tq=${encodeURIComponent('select A, B')}`
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const publicDir = join(root, 'public')
@@ -72,14 +72,21 @@ const fetchContactUrl = async () => {
   const response = await fetch(CONTACT_CSV)
   if (!response.ok) throw new Error(`Failed to load Contact sheet (${response.status})`)
   const rows = parseCsv(await response.text())
-  if (rows.length < 2) return ''
+  if (!rows.length) return ''
 
   const headers = rows[0].map(normalizeKey)
-  const textIdx = headers.indexOf('text')
-  const contentIdx = headers.indexOf('content')
-  if (textIdx === -1 || contentIdx === -1) return ''
+  let textIdx = headers.indexOf('text')
+  let contentIdx = headers.indexOf('content')
+  let dataRows = rows.slice(1)
 
-  for (const cols of rows.slice(1)) {
+  if (textIdx === -1 || contentIdx === -1) {
+    textIdx = 0
+    contentIdx = Math.min(1, (rows[0]?.length || 1) - 1)
+    const firstKey = normalizeKey(rows[0]?.[textIdx] || '')
+    dataRows = firstKey === 'text' ? rows.slice(1) : rows
+  }
+
+  for (const cols of dataRows) {
     if (normalizeKey(cols[textIdx] || '') === 'url') {
       return (cols[contentIdx] || '').trim()
     }
