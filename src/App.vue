@@ -49,11 +49,14 @@ const objectUrls = []
 const isMobile = ref(false)
 const isNarrow = ref(false)
 /**
- * ≤450px marquee is a pure HTML/CSS island: createElement once into a stable
- * host, then never touch that DOM again (no Vue VNodes in the track).
+ * ≤450px marquee is a pure HTML/CSS island: createElement into a stable host
+ * (no Vue VNodes in the track). Phases: none → text (H1-only, immediate) →
+ * full (H1↔icons). One upgrade from text→full is allowed; after full, never
+ * rebuild so CSS animation stays seamless.
  */
 const marqueeHostRef = ref(null)
-let marqueeIslandBuilt = false
+/** @type {'none' | 'text' | 'full'} */
+let marqueePhase = 'none'
 let mobileMq = null
 let narrowMq = null
 
@@ -85,10 +88,18 @@ const loadDecodedImage = async (src) => {
   return img
 }
 
+const marqueeDurationSeconds = () => {
+  const speed = contact.value.marqueeSpeed
+  const safe = Number.isFinite(speed) && speed > 0 ? speed : 1
+  return MARQUEE_BASE_SECONDS / safe
+}
+
 const appendMarqueeItem = (group, item) => {
   if (item.type === 'h1') {
     const span = document.createElement('span')
-    span.className = 'marquee-item'
+    span.className = item.spaced
+      ? 'marquee-item marquee-item--spaced'
+      : 'marquee-item'
     span.textContent = SITE_TITLE
     group.appendChild(span)
     return
@@ -112,17 +123,47 @@ const buildMarqueeGroup = (items) => {
   return group
 }
 
-/**
- * One-shot imperative mount. Sets --marquee-duration once; CSS owns motion.
- */
-const prepareMarqueeOnce = async () => {
-  if (marqueeIslandBuilt) return
+const replaceMarqueeTrack = (items, durationSeconds) => {
   const host = marqueeHostRef.value
   if (!host) return
-  marqueeIslandBuilt = true
+  const track = document.createElement('div')
+  track.className = 'marquee-track'
+  track.style.setProperty('--marquee-duration', `${durationSeconds}s`)
+  track.appendChild(buildMarqueeGroup(items))
+  track.appendChild(buildMarqueeGroup(items))
+  host.replaceChildren(track)
+}
+
+/** Immediate H1-only marquee so ≤450px never looks blank while icons load. */
+const mountTextMarquee = () => {
+  if (marqueePhase === 'full') return
+  // Several spaced H1s per group → 50px gaps in the seamless -50% loop.
+  const items = [
+    { type: 'h1', spaced: true },
+    { type: 'h1', spaced: true },
+    { type: 'h1', spaced: true },
+    { type: 'h1', spaced: true },
+  ]
+  replaceMarqueeTrack(items, marqueeDurationSeconds())
+  marqueePhase = 'text'
+}
+
+/**
+ * Single upgrade to H1↔icon sequence. After this, CSS owns motion — no remounts.
+ */
+const mountFullMarquee = async () => {
+  if (marqueePhase === 'full') return
+  const host = marqueeHostRef.value
+  if (!host) return
 
   try {
     const icons = helpers.value
+    if (!icons.length) {
+      mountTextMarquee()
+      marqueePhase = 'full'
+      return
+    }
+
     const decoded = await Promise.all(
       icons.map(async (helper) => {
         const img = await loadDecodedImage(helper.src)
@@ -137,35 +178,22 @@ const prepareMarqueeOnce = async () => {
       }),
     )
 
+    if (marqueePhase === 'full') return
+
     const items = []
-    if (!decoded.length) {
+    for (const icon of decoded) {
       items.push({ type: 'h1' })
-    } else {
-      for (const icon of decoded) {
-        items.push({ type: 'h1' })
-        items.push(icon)
-      }
+      items.push(icon)
     }
 
-    const speed = contact.value.marqueeSpeed
-    const safe = Number.isFinite(speed) && speed > 0 ? speed : 1
-    const duration = MARQUEE_BASE_SECONDS / safe
-
-    const track = document.createElement('div')
-    track.className = 'marquee-track'
-    track.style.setProperty('--marquee-duration', `${duration}s`)
-    track.appendChild(buildMarqueeGroup(items))
-    track.appendChild(buildMarqueeGroup(items))
-
-    host.replaceChildren(track)
+    replaceMarqueeTrack(items, marqueeDurationSeconds())
+    marqueePhase = 'full'
   } catch (error) {
     console.error(error)
-    const track = document.createElement('div')
-    track.className = 'marquee-track'
-    track.style.setProperty('--marquee-duration', `${MARQUEE_BASE_SECONDS}s`)
-    track.appendChild(buildMarqueeGroup([{ type: 'h1' }]))
-    track.appendChild(buildMarqueeGroup([{ type: 'h1' }]))
-    host.replaceChildren(track)
+    if (marqueePhase !== 'full') {
+      mountTextMarquee()
+      marqueePhase = 'full'
+    }
   }
 }
 
@@ -919,13 +947,18 @@ onMounted(async () => {
   isNarrow.value = narrowMq.matches
   narrowMq.addEventListener('change', onNarrowChange)
   window.addEventListener('resize', onStageLayoutChange)
+
+  // Paint H1 text marquee immediately so ≤450px never shows a blank white stage.
+  await nextTick()
+  mountTextMarquee()
+
   try {
     await Promise.all([loadLists(), loadIconsFromSheet(), loadFaviconFromSheet()])
   } catch (error) {
     console.error(error)
   }
-  // Mount marquee only after sheet data is settled so CSS animation never restarts.
-  await prepareMarqueeOnce()
+  // One upgrade to H1↔icon marquee; afterward CSS owns motion (no remounts).
+  await mountFullMarquee()
 })
 
 onUnmounted(() => {
@@ -972,14 +1005,15 @@ onUnmounted(() => {
           <ul class="space-y-1">
             <li
               v-if="contact.instagram || contactEmailDisplay"
-              class="flex flex-col gap-1 max-md:mb-2 max-[450px]:mb-[3px] max-[450px]:flex-row max-[450px]:items-center max-[450px]:justify-between max-[450px]:gap-0"
+              class="flex items-center max-md:mb-2 max-[450px]:mb-[3px]"
             >
+              <span v-if="contactEmailDisplay">{{ contactEmailDisplay }}</span>
               <a
                 v-if="contact.instagram"
                 :href="contact.instagram"
                 target="_blank"
                 rel="noopener noreferrer"
-                class="inline-flex min-h-6 min-w-6 items-center text-[#0000EE] max-[450px]:order-2"
+                class="ml-auto inline-flex min-h-6 min-w-6 items-center text-[#0000EE]"
                 aria-label="Instagram (opens in a new tab)"
               >
                 <svg
@@ -996,10 +1030,6 @@ onUnmounted(() => {
                   />
                 </svg>
               </a>
-              <span
-                v-if="contactEmailDisplay"
-                class="max-[450px]:order-1"
-              >{{ contactEmailDisplay }}</span>
             </li>
             <li v-if="contact.about" class="max-md:mb-2 max-[450px]:mb-[3px]">
               <p class="m-0">{{ contact.about }}</p>
