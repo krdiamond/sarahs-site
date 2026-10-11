@@ -1,5 +1,9 @@
-# Vue 3 + Vite
+# Sarah Fensom — pre-launch placeholder
 
-This template should help get you started developing with Vue 3 in Vite. The template uses Vue 3 `<script setup>` SFCs, check out the [script setup docs](https://v3.vuejs.org/api/sfc-script-setup.html#sfc-script-setup) to learn more.
+Until **November 1, 2026, 5:00 AM America/Los_Angeles**, this `main` branch serves a minimal placeholder on GitHub Pages / [sarahfensom.com](https://sarahfensom.com/).
 
-Learn more about IDE Support for Vue in the [Vue Docs Scaling up Guide](https://vuejs.org/guide/scaling-up/tooling.html#ide-support).
+The full site lives on branch [`launch-ready`](https://github.com/krdiamond/sarahs-site/tree/launch-ready).
+
+A scheduled GitHub Action (`.github/workflows/birthday-launch.yml`) restores `launch-ready` onto `main` at that time.
+
+**Do not merge** branch `HTML-ONLY` into `main`. That branch is a separate Vue-free preview only.
