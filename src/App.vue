@@ -838,12 +838,16 @@ onUnmounted(() => {
           class="min-h-0 flex-1 overflow-y-auto overscroll-contain"
         >
           <ul class="space-y-1">
-            <li v-if="contact.instagram" class="max-md:mb-2">
+            <li
+              v-if="contact.instagram || contactEmailDisplay"
+              class="flex flex-col gap-1 max-md:mb-2 max-[450px]:flex-row max-[450px]:items-center max-[450px]:justify-between max-[450px]:gap-0"
+            >
               <a
+                v-if="contact.instagram"
                 :href="contact.instagram"
                 target="_blank"
                 rel="noopener noreferrer"
-                class="inline-flex min-h-6 min-w-6 items-center text-[#0000EE]"
+                class="inline-flex min-h-6 min-w-6 items-center text-[#0000EE] max-[450px]:order-2"
                 aria-label="Instagram (opens in a new tab)"
               >
                 <svg
@@ -860,9 +864,10 @@ onUnmounted(() => {
                   />
                 </svg>
               </a>
-            </li>
-            <li v-if="contactEmailDisplay" class="max-md:mb-2">
-              <span>{{ contactEmailDisplay }}</span>
+              <span
+                v-if="contactEmailDisplay"
+                class="max-[450px]:order-1"
+              >{{ contactEmailDisplay }}</span>
             </li>
             <li v-if="contact.about" class="max-md:mb-2">
               <p class="m-0">{{ contact.about }}</p>
@@ -1003,11 +1008,7 @@ onUnmounted(() => {
                   v-else
                   :src="item.helper.src"
                   alt=""
-                  class="block shrink-0 select-none"
-                  :style="{
-                    width: `${displayWidth(item.helper)}px`,
-                    height: `${displayHeight(item.helper)}px`,
-                  }"
+                  class="block h-[80px] w-auto shrink-0 select-none"
                   draggable="false"
                 />
               </template>
