@@ -49,68 +49,124 @@ const objectUrls = []
 const isMobile = ref(false)
 const isNarrow = ref(false)
 /**
- * Marquee mounts once after icons+contact settle. Frozen sequence/duration
- * prevent Vue remounts or --marquee-duration updates from restarting CSS
- * animation (the prior “glitch after a while”).
+ * ≤450px marquee is a pure HTML/CSS island: createElement once into a stable
+ * host, then never touch that DOM again (no Vue VNodes in the track).
  */
-const marqueeMounted = ref(false)
-const marqueeSequence = ref([])
-const marqueeDurationFrozen = ref(MARQUEE_BASE_SECONDS)
+const marqueeHostRef = ref(null)
+let marqueeIslandBuilt = false
 let mobileMq = null
 let narrowMq = null
 
-const marqueeIconSize = (helper) => {
-  const height = 80
-  const ratio =
-    helper.baseHeight > 0 ? helper.baseWidth / helper.baseHeight : 1
-  return {
-    width: Math.max(1, Math.round(height * ratio)),
-    height,
+const loadDecodedImage = async (src) => {
+  const img = new Image()
+  img.src = src
+  try {
+    await Promise.race([
+      typeof img.decode === 'function'
+        ? img.decode()
+        : new Promise((resolve, reject) => {
+            img.onload = resolve
+            img.onerror = reject
+          }),
+      new Promise((resolve) => {
+        window.setTimeout(resolve, 2500)
+      }),
+    ])
+  } catch {
+    // non-fatal
   }
-}
-
-/** Snapshot H1↔icon sequence with explicit px sizes (identical in both copies). */
-const buildMarqueeSequence = () => {
-  const icons = helpers.value
-  if (!icons.length) {
-    return [{ type: 'h1', key: 'h1-solo' }]
-  }
-  const items = []
-  icons.forEach((helper, index) => {
-    const size = marqueeIconSize(helper)
-    items.push({ type: 'h1', key: `h1-${index}` })
-    items.push({
-      type: 'icon',
-      key: `icon-${helper.id}`,
-      src: helper.src,
-      width: size.width,
-      height: size.height,
+  if (!img.complete) {
+    await new Promise((resolve) => {
+      img.onload = resolve
+      img.onerror = resolve
+      window.setTimeout(resolve, 2500)
     })
-  })
-  return items
+  }
+  return img
 }
 
-const preloadImage = (src) =>
-  new Promise((resolve) => {
-    const img = new Image()
-    img.onload = resolve
-    img.onerror = resolve
-    img.src = src
-  })
+const appendMarqueeItem = (group, item) => {
+  if (item.type === 'h1') {
+    const span = document.createElement('span')
+    span.className = 'marquee-item'
+    span.textContent = SITE_TITLE
+    group.appendChild(span)
+    return
+  }
+  const img = document.createElement('img')
+  img.className = 'marquee-item'
+  img.src = item.src
+  img.alt = ''
+  img.width = item.width
+  img.height = item.height
+  img.draggable = false
+  img.style.width = `${item.width}px`
+  img.style.height = `${item.height}px`
+  group.appendChild(img)
+}
 
-/** Build + mount marquee DOM once; never remount or retarget duration. */
+const buildMarqueeGroup = (items) => {
+  const group = document.createElement('div')
+  group.className = 'marquee-group'
+  for (const item of items) appendMarqueeItem(group, item)
+  return group
+}
+
+/**
+ * One-shot imperative mount. Sets --marquee-duration once; CSS owns motion.
+ */
 const prepareMarqueeOnce = async () => {
-  if (marqueeMounted.value) return
+  if (marqueeIslandBuilt) return
+  const host = marqueeHostRef.value
+  if (!host) return
+  marqueeIslandBuilt = true
 
-  const icons = helpers.value
-  await Promise.all(icons.map((helper) => preloadImage(helper.src)))
+  try {
+    const icons = helpers.value
+    const decoded = await Promise.all(
+      icons.map(async (helper) => {
+        const img = await loadDecodedImage(helper.src)
+        const naturalW = img.naturalWidth || helper.baseWidth || 80
+        const naturalH = img.naturalHeight || helper.baseHeight || 80
+        const height = 80
+        const width = Math.max(
+          1,
+          Math.round((height * naturalW) / Math.max(1, naturalH)),
+        )
+        return { type: 'icon', src: helper.src, width, height }
+      }),
+    )
 
-  const speed = contact.value.marqueeSpeed
-  const safe = Number.isFinite(speed) && speed > 0 ? speed : 1
-  marqueeDurationFrozen.value = MARQUEE_BASE_SECONDS / safe
-  marqueeSequence.value = buildMarqueeSequence()
-  await nextTick()
-  marqueeMounted.value = true
+    const items = []
+    if (!decoded.length) {
+      items.push({ type: 'h1' })
+    } else {
+      for (const icon of decoded) {
+        items.push({ type: 'h1' })
+        items.push(icon)
+      }
+    }
+
+    const speed = contact.value.marqueeSpeed
+    const safe = Number.isFinite(speed) && speed > 0 ? speed : 1
+    const duration = MARQUEE_BASE_SECONDS / safe
+
+    const track = document.createElement('div')
+    track.className = 'marquee-track'
+    track.style.setProperty('--marquee-duration', `${duration}s`)
+    track.appendChild(buildMarqueeGroup(items))
+    track.appendChild(buildMarqueeGroup(items))
+
+    host.replaceChildren(track)
+  } catch (error) {
+    console.error(error)
+    const track = document.createElement('div')
+    track.className = 'marquee-track'
+    track.style.setProperty('--marquee-duration', `${MARQUEE_BASE_SECONDS}s`)
+    track.appendChild(buildMarqueeGroup([{ type: 'h1' }]))
+    track.appendChild(buildMarqueeGroup([{ type: 'h1' }]))
+    host.replaceChildren(track)
+  }
 }
 
 const contactEmailDisplay = computed(() =>
@@ -1061,72 +1117,14 @@ onUnmounted(() => {
         </h1>
       </div>
 
-      <!-- ≤450px: SR title + CSS-only dual-copy marquee (mounted once; no JS motion) -->
+      <!-- ≤450px: SR title + imperative HTML/CSS marquee host (Vue never owns track children) -->
       <div class="hidden h-full w-full max-[450px]:flex max-[450px]:flex-col">
         <h1 class="sr-only">{{ SITE_TITLE }}</h1>
         <div
+          ref="marqueeHostRef"
           class="marquee-viewport flex min-h-0 flex-1 items-center overflow-hidden"
           aria-hidden="true"
-        >
-          <div
-            v-if="marqueeMounted"
-            class="marquee-track"
-            :style="{ '--marquee-duration': `${marqueeDurationFrozen}s` }"
-          >
-            <div class="marquee-group">
-              <template
-                v-for="item in marqueeSequence"
-                :key="`a-${item.key}`"
-              >
-                <span
-                  v-if="item.type === 'h1'"
-                  class="marquee-item shrink-0 font-['Times_New_Roman',Times,serif] text-[32px] leading-none whitespace-nowrap"
-                >
-                  {{ SITE_TITLE }}
-                </span>
-                <img
-                  v-else
-                  :src="item.src"
-                  alt=""
-                  :width="item.width"
-                  :height="item.height"
-                  class="marquee-item block shrink-0 select-none"
-                  :style="{
-                    width: `${item.width}px`,
-                    height: `${item.height}px`,
-                  }"
-                  draggable="false"
-                />
-              </template>
-            </div>
-            <div class="marquee-group" aria-hidden="true">
-              <template
-                v-for="item in marqueeSequence"
-                :key="`b-${item.key}`"
-              >
-                <span
-                  v-if="item.type === 'h1'"
-                  class="marquee-item shrink-0 font-['Times_New_Roman',Times,serif] text-[32px] leading-none whitespace-nowrap"
-                >
-                  {{ SITE_TITLE }}
-                </span>
-                <img
-                  v-else
-                  :src="item.src"
-                  alt=""
-                  :width="item.width"
-                  :height="item.height"
-                  class="marquee-item block shrink-0 select-none"
-                  :style="{
-                    width: `${item.width}px`,
-                    height: `${item.height}px`,
-                  }"
-                  draggable="false"
-                />
-              </template>
-            </div>
-          </div>
-        </div>
+        ></div>
       </div>
     </div>
   </main>
