@@ -1,8 +1,7 @@
 @import "tailwindcss";
 
 html,
-body,
-#app {
+body {
   height: 100%;
   margin: 0;
   overflow: hidden;
@@ -27,7 +26,7 @@ a:focus-visible {
 }
 
 /*
-  ≤450px marquee — pure HTML/CSS island (injected once via v-once + v-html).
+  ≤450px marquee — pure HTML/CSS island (injected once via createElement).
   Structure: .marquee-viewport > .marquee-track > (.marquee-group × 2)
   Both groups identical width; track animates exactly -50% of itself.
   Trailing margin on each item = seam spacing between copies.
