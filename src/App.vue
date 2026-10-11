@@ -1,5 +1,5 @@
 <script setup>
-import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import JSZip from 'jszip'
 
 const SHEET_ID = '1PIcdiUt1_Yj9Mf1zErlEPObBl5Kg6W5Z3Qd5p54-WRE'
@@ -7,18 +7,13 @@ const DEFAULT_ICON_WIDTH = 160
 const MOBILE_MQ = '(max-width: 767px)'
 const NARROW_MQ = '(max-width: 450px)'
 const SITE_TITLE = 'Sarah Fensom'
+/** Baseline CSS animation duration at Marquee Speed = 1. */
+const MARQUEE_BASE_SECONDS = 28
 const EVENTS_ERROR_MSG = 'Couldn’t load events — try refreshing'
 const WORK_ERROR_MSG = 'Couldn’t load works — try refreshing'
 const CONTACT_ERROR_MSG = 'Couldn’t load contact — try refreshing'
 
-const sheetCsvUrl = (sheetName) =>
-  `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheetName)}`
-const sheetXlsxUrl = () =>
-  `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=xlsx`
-
-const events = ref([])
-const work = ref([])
-const contact = ref({
+const emptyContact = () => ({
   name: '',
   jobTitle: '',
   url: '',
@@ -28,7 +23,24 @@ const contact = ref({
   addressLocality: '',
   addressRegion: '',
   addressCountry: '',
+  marqueeSpeed: 1,
 })
+
+const sheetCsvUrl = (sheetName, { headers, tq } = {}) => {
+  const params = new URLSearchParams({
+    tqx: 'out:csv',
+    sheet: sheetName,
+  })
+  if (headers === 0) params.set('headers', '0')
+  if (tq) params.set('tq', tq)
+  return `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?${params}`
+}
+const sheetXlsxUrl = () =>
+  `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=xlsx`
+
+const events = ref([])
+const work = ref([])
+const contact = ref(emptyContact())
 const eventsError = ref('')
 const workError = ref('')
 const contactError = ref('')
@@ -36,6 +48,8 @@ const helpers = ref([])
 const objectUrls = []
 const isMobile = ref(false)
 const isNarrow = ref(false)
+/** True once marquee images are decoded so CSS -50% loop stays seamless. */
+const marqueeReady = ref(false)
 let mobileMq = null
 let narrowMq = null
 
@@ -52,6 +66,41 @@ const marqueeItems = computed(() => {
   })
   return items
 })
+
+/** Unitless speed multiplier from Contact sheet → CSS duration. */
+const marqueeDurationSeconds = computed(() => {
+  const speed = contact.value.marqueeSpeed
+  const safe = Number.isFinite(speed) && speed > 0 ? speed : 1
+  return MARQUEE_BASE_SECONDS / safe
+})
+
+const preloadMarqueeImages = async (icons) => {
+  marqueeReady.value = false
+  if (!icons.length) {
+    marqueeReady.value = true
+    return
+  }
+  await Promise.all(
+    icons.map(
+      (helper) =>
+        new Promise((resolve) => {
+          const img = new Image()
+          img.onload = resolve
+          img.onerror = resolve
+          img.src = helper.src
+        }),
+    ),
+  )
+  marqueeReady.value = true
+}
+
+watch(
+  helpers,
+  (icons) => {
+    preloadMarqueeImages(icons)
+  },
+  { immediate: true },
+)
 
 const contactEmailDisplay = computed(() =>
   (contact.value.email || '').replace(/^mailto:/i, '').trim(),
@@ -147,23 +196,40 @@ const fetchSheet = async (sheetName, creditKeys) => {
   return rowsToEntries(parseCsv(text), creditKeys)
 }
 
+/** Positive finite multiplier; invalid/missing/≤0 → 1. */
+const parseMarqueeSpeed = (value) => {
+  const n = Number.parseFloat(String(value ?? '').trim())
+  if (!Number.isFinite(n) || n <= 0) return 1
+  return n
+}
+
 const fetchContactSheet = async () => {
-  const response = await fetch(sheetCsvUrl('Contact'))
+  // headers=0 keeps Text/Content as data rows (gviz default header mode
+  // can collapse this sheet into unusable column labels).
+  const response = await fetch(
+    sheetCsvUrl('Contact', { headers: 0, tq: 'select A, B' }),
+  )
   if (!response.ok) throw new Error('Failed to load Contact')
   const rows = parseCsv(await response.text())
-  if (rows.length < 2) throw new Error('Contact sheet is empty')
+  if (!rows.length) throw new Error('Contact sheet is empty')
 
   const headers = rows[0].map(normalizeKey)
-  const textIdx = headers.indexOf('text')
-  const contentIdx = headers.indexOf('content')
+  let textIdx = headers.indexOf('text')
+  let contentIdx = headers.indexOf('content')
+  let dataRows = rows.slice(1)
+
+  // Resilient fallback: first two columns as Text/Content pairs.
   if (textIdx === -1 || contentIdx === -1) {
-    throw new Error('Contact sheet missing Text/Content columns')
+    textIdx = 0
+    contentIdx = Math.min(1, (rows[0]?.length || 1) - 1)
+    const firstKey = normalizeKey(rows[0]?.[textIdx] || '')
+    dataRows = firstKey === 'text' ? rows.slice(1) : rows
   }
 
   const fields = {}
-  for (const cols of rows.slice(1)) {
+  for (const cols of dataRows) {
     const key = normalizeKey(cols[textIdx] || '')
-    if (!key) continue
+    if (!key || key === 'text') continue
     fields[key] = (cols[contentIdx] || '').trim()
   }
 
@@ -179,6 +245,8 @@ const fetchContactSheet = async () => {
       fields['address locality'] || fields['adress locality'] || '',
     addressRegion: fields['address region'] || '',
     addressCountry: fields['address country'] || '',
+    // Extra Contact rows (e.g. Marquee Speed) must not break the load.
+    marqueeSpeed: parseMarqueeSpeed(fields['marquee speed']),
   }
 }
 
@@ -277,17 +345,7 @@ const loadLists = async () => {
     contactError.value = ''
     syncSeoFromContact()
   } else {
-    contact.value = {
-      name: '',
-      jobTitle: '',
-      url: '',
-      about: '',
-      email: '',
-      instagram: '',
-      addressLocality: '',
-      addressRegion: '',
-      addressCountry: '',
-    }
+    contact.value = emptyContact()
     contactError.value = CONTACT_ERROR_MSG
     console.error(contactResult.reason)
   }
@@ -949,9 +1007,9 @@ onUnmounted(() => {
       </section>
     </div>
 
-    <!-- White stage. ≤450px: on top (order-1), exactly 100px tall, H1↔icon marquee (no drag). -->
+    <!-- White stage. ≤450px: on top (order-1), exactly 100px, full-bleed H1↔icon marquee (no drag). -->
     <div
-      class="relative h-full w-1/2 overflow-hidden bg-white p-4 max-[450px]:order-1 max-[450px]:h-[100px] max-[450px]:w-full max-[450px]:shrink-0"
+      class="relative h-full w-1/2 overflow-hidden bg-white p-4 max-[450px]:order-1 max-[450px]:h-[100px] max-[450px]:w-full max-[450px]:shrink-0 max-[450px]:p-0"
     >
       <!-- Desktop / tablet: draggable icons + corner H1 -->
       <div
@@ -985,15 +1043,23 @@ onUnmounted(() => {
         </h1>
       </div>
 
-      <!-- ≤450px: one SR title + decorative marquee (duplicates aria-hidden) -->
+      <!-- ≤450px: SR title + CSS-only dual-copy marquee (no JS motion) -->
       <div class="hidden h-full w-full max-[450px]:flex max-[450px]:flex-col">
         <h1 class="sr-only">{{ SITE_TITLE }}</h1>
         <div
           class="flex min-h-0 flex-1 items-center overflow-hidden"
           aria-hidden="true"
         >
-          <div class="marquee-track flex w-max items-center gap-6">
-            <template v-for="copy in 2" :key="'marquee-copy-' + copy">
+          <div
+            class="marquee-track"
+            :class="{ 'marquee-track--ready': marqueeReady }"
+            :style="{ '--marquee-duration': `${marqueeDurationSeconds}s` }"
+          >
+            <div
+              v-for="copy in 2"
+              :key="'marquee-copy-' + copy"
+              class="marquee-group"
+            >
               <template
                 v-for="item in marqueeItems"
                 :key="`copy-${copy}-${item.key}`"
@@ -1012,7 +1078,7 @@ onUnmounted(() => {
                   draggable="false"
                 />
               </template>
-            </template>
+            </div>
           </div>
         </div>
       </div>

@@ -26,7 +26,10 @@ a:focus-visible {
   outline-offset: 2px;
 }
 
-/* ≤450px white-stage marquee: two identical halves; animate -50% for a seamless loop */
+/*
+  ≤450px marquee: two identical .marquee-group halves; translate -50% with
+  linear infinite. Motion is CSS-only (duration via --marquee-duration).
+*/
 @keyframes marquee-scroll {
   from {
     transform: translate3d(0, 0, 0);
@@ -37,11 +40,26 @@ a:focus-visible {
 }
 
 .marquee-track {
-  animation: marquee-scroll 28s linear infinite;
+  display: flex;
+  width: max-content;
+  will-change: transform;
+}
+
+.marquee-group {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 1.5rem;
+  /* Match internal gap so the seam between copies is identical */
+  padding-inline-end: 1.5rem;
+}
+
+.marquee-track--ready {
+  animation: marquee-scroll var(--marquee-duration, 28s) linear infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .marquee-track {
+  .marquee-track--ready {
     animation: none;
   }
 }
