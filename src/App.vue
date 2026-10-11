@@ -778,11 +778,11 @@ onUnmounted(() => {
   <a href="#main-content" class="sr-only">Skip to content</a>
   <main
     id="main-content"
-    class="flex h-dvh w-full overflow-hidden font-['Times_New_Roman',Times,serif] text-[12px] leading-normal"
+    class="flex h-dvh w-full overflow-hidden font-['Times_New_Roman',Times,serif] text-[12px] leading-normal max-[350px]:flex-col"
   >
-    <!-- Left: gray; Contact 1/4, Events 1/4, Work 1/2 -->
+    <!-- Left: gray; Contact 1/4, Events 1/4, Work 1/2. ≤350px: top pane (scrolls); white H1 strip pinned below. -->
     <div
-      class="flex h-full min-h-0 w-1/2 flex-col bg-neutral-200 max-[450px]:w-full"
+      class="flex h-full min-h-0 w-1/2 flex-col bg-neutral-200 max-[450px]:w-full max-[350px]:h-auto max-[350px]:min-h-0 max-[350px]:flex-1"
     >
       <section
         class="flex min-h-0 flex-[1_1_0%] flex-col overflow-hidden border-b border-black p-4"
@@ -908,11 +908,13 @@ onUnmounted(() => {
       </section>
     </div>
 
-    <!-- Right: white stage. Icons are decorative play only. -->
-    <div class="relative h-full w-1/2 overflow-hidden bg-white p-4">
+    <!-- Right: white stage. Icons are decorative play only. ≤350px: H1-only strip pinned to bottom. -->
+    <div
+      class="relative h-full w-1/2 overflow-hidden bg-white p-4 max-[350px]:h-auto max-[350px]:w-full max-[350px]:shrink-0 max-[350px]:grow-0"
+    >
       <div
         ref="stageRef"
-        class="relative h-full w-full overflow-hidden"
+        class="relative h-full w-full overflow-hidden max-[350px]:h-auto"
         :class="isDragging ? 'select-none' : ''"
       >
         <!-- Decorative: pointer drag is optional play; not required to use the site -->
@@ -923,7 +925,7 @@ onUnmounted(() => {
           alt=""
           aria-hidden="true"
           :style="helperStyle(helper)"
-          class="absolute top-0 left-0 block touch-none select-none"
+          class="absolute top-0 left-0 block touch-none select-none max-[350px]:hidden"
           :class="
             drag?.id === helper.id ? 'cursor-grabbing' : 'cursor-grab'
           "
@@ -935,7 +937,7 @@ onUnmounted(() => {
         />
 
         <h1
-          class="absolute right-0 bottom-0 z-50 m-0 text-right font-['Times_New_Roman',Times,serif] text-[34px] leading-none"
+          class="absolute right-0 bottom-0 z-50 m-0 text-right font-['Times_New_Roman',Times,serif] text-[48px] leading-none max-[450px]:text-[32px] max-[350px]:static"
         >
           Sarah Fensom
         </h1>
