@@ -986,7 +986,7 @@ onUnmounted(() => {
       >
         <h2
           id="contact-heading"
-          class="mb-3 shrink-0 font-bold max-[450px]:mb-[3px]"
+          class="mb-[3px] shrink-0 font-bold"
         >
           Contact
         </h2>
@@ -1040,7 +1040,7 @@ onUnmounted(() => {
       <section
         class="flex min-h-0 flex-[1_1_0%] flex-col overflow-hidden border-b border-black p-4"
       >
-        <h2 class="mb-3 shrink-0 font-bold max-[450px]:mb-[3px]">Events</h2>
+        <h2 class="mb-[3px] shrink-0 font-bold">Events</h2>
         <p
           v-if="eventsError"
           class="m-0 min-h-0 flex-1 overflow-y-auto"
@@ -1076,7 +1076,7 @@ onUnmounted(() => {
       <section
         class="flex min-h-0 flex-[2_1_0%] flex-col overflow-hidden p-4"
       >
-        <h2 class="mb-3 shrink-0 font-bold max-[450px]:mb-[3px]">Work</h2>
+        <h2 class="mb-[3px] shrink-0 font-bold">Work</h2>
         <p
           v-if="workError"
           class="m-0 min-h-0 flex-1 overflow-y-auto"
