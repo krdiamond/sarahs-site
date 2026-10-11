@@ -944,9 +944,9 @@ onUnmounted(() => {
       </section>
     </div>
 
-    <!-- White stage. ≤450px: on top (order-1), ~half viewport, H1↔icon marquee (no drag). -->
+    <!-- White stage. ≤450px: on top (order-1), exactly 100px tall, H1↔icon marquee (no drag). -->
     <div
-      class="relative h-full w-1/2 overflow-hidden bg-white p-4 max-[450px]:order-1 max-[450px]:h-1/2 max-[450px]:w-full max-[450px]:shrink-0"
+      class="relative h-full w-1/2 overflow-hidden bg-white p-4 max-[450px]:order-1 max-[450px]:h-[100px] max-[450px]:w-full max-[450px]:shrink-0"
     >
       <!-- Desktop / tablet: draggable icons + corner H1 -->
       <div
