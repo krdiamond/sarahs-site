@@ -25,3 +25,23 @@ a:focus-visible {
   outline: 2px solid #000;
   outline-offset: 2px;
 }
+
+/* ≤450px white-stage marquee: two identical halves; animate -50% for a seamless loop */
+@keyframes marquee-scroll {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+.marquee-track {
+  animation: marquee-scroll 28s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .marquee-track {
+    animation: none;
+  }
+}
