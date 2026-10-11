@@ -27,10 +27,11 @@ a:focus-visible {
 }
 
 /*
-  ≤450px marquee — pure HTML/CSS island (injected once via v-once + v-html).
+  ≤450px marquee — pure HTML/CSS island (injected via createElement).
   Structure: .marquee-viewport > .marquee-track > (.marquee-group × 2)
   Both groups identical width; track animates exactly -50% of itself.
   Trailing margin on each item = seam spacing between copies.
+  Text phase uses .marquee-item--spaced (50px); full H1↔icon uses default.
 */
 @keyframes marquee-scroll {
   from {
@@ -60,6 +61,11 @@ a:focus-visible {
 .marquee-item {
   flex-shrink: 0;
   margin-inline-end: 1.5rem;
+}
+
+/* H1-only loading marquee: 50px between repeated names */
+.marquee-item.marquee-item--spaced {
+  margin-inline-end: 50px;
 }
 
 .marquee-group > span.marquee-item {
