@@ -5,6 +5,8 @@ import JSZip from 'jszip'
 const SHEET_ID = '1PIcdiUt1_Yj9Mf1zErlEPObBl5Kg6W5Z3Qd5p54-WRE'
 const DEFAULT_ICON_WIDTH = 160
 const MOBILE_MQ = '(max-width: 767px)'
+const NARROW_MQ = '(max-width: 450px)'
+const SITE_TITLE = 'Sarah Fensom'
 const EVENTS_ERROR_MSG = 'Couldn’t load events — try refreshing'
 const WORK_ERROR_MSG = 'Couldn’t load works — try refreshing'
 const CONTACT_ERROR_MSG = 'Couldn’t load contact — try refreshing'
@@ -33,7 +35,23 @@ const contactError = ref('')
 const helpers = ref([])
 const objectUrls = []
 const isMobile = ref(false)
+const isNarrow = ref(false)
 let mobileMq = null
+let narrowMq = null
+
+/** H1, icon1, H1, icon2, … for the ≤450px marquee. */
+const marqueeItems = computed(() => {
+  const icons = helpers.value
+  if (!icons.length) {
+    return [{ type: 'h1', key: 'h1-solo' }]
+  }
+  const items = []
+  icons.forEach((helper, index) => {
+    items.push({ type: 'h1', key: `h1-${index}` })
+    items.push({ type: 'icon', key: `icon-${helper.id}`, helper })
+  })
+  return items
+})
 
 const contactEmailDisplay = computed(() =>
   (contact.value.email || '').replace(/^mailto:/i, '').trim(),
@@ -623,6 +641,7 @@ const rectsOverlap = (a, b, gap = 8) =>
   a.y + a.height + gap > b.y
 
 const placeHelpersInitially = () => {
+  if (isNarrow.value) return
   const stage = stageRef.value
   if (!stage || !helpers.value.length) return
 
@@ -696,6 +715,7 @@ const placeHelpersInitially = () => {
 }
 
 const onStageLayoutChange = () => {
+  if (isNarrow.value) return
   centerPrimaryHelper()
   for (const helper of helpers.value) {
     if (helper.isPrimary) continue
@@ -705,7 +725,18 @@ const onStageLayoutChange = () => {
 
 const onMobileChange = () => {
   isMobile.value = mobileMq?.matches ?? false
-  onStageLayoutChange()
+  if (!isNarrow.value) onStageLayoutChange()
+}
+
+const onNarrowChange = () => {
+  isNarrow.value = narrowMq?.matches ?? false
+  if (isNarrow.value) {
+    drag.value = null
+    return
+  }
+  nextTick(() => {
+    placeHelpersInitially()
+  })
 }
 
 const helperStyle = (helper) => ({
@@ -716,6 +747,7 @@ const helperStyle = (helper) => ({
 })
 
 const onPointerDown = (event, helper) => {
+  if (isNarrow.value) return
   if (event.button !== 0) return
   event.preventDefault()
   const stage = stageRef.value
@@ -758,6 +790,9 @@ onMounted(async () => {
   mobileMq = window.matchMedia(MOBILE_MQ)
   isMobile.value = mobileMq.matches
   mobileMq.addEventListener('change', onMobileChange)
+  narrowMq = window.matchMedia(NARROW_MQ)
+  isNarrow.value = narrowMq.matches
+  narrowMq.addEventListener('change', onNarrowChange)
   window.addEventListener('resize', onStageLayoutChange)
   try {
     await Promise.all([loadLists(), loadIconsFromSheet(), loadFaviconFromSheet()])
@@ -768,6 +803,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   mobileMq?.removeEventListener('change', onMobileChange)
+  narrowMq?.removeEventListener('change', onNarrowChange)
   window.removeEventListener('resize', onStageLayoutChange)
   for (const url of objectUrls) URL.revokeObjectURL(url)
 })
@@ -778,11 +814,11 @@ onUnmounted(() => {
   <a href="#main-content" class="sr-only">Skip to content</a>
   <main
     id="main-content"
-    class="flex h-dvh w-full overflow-hidden font-['Times_New_Roman',Times,serif] text-[12px] leading-normal max-[350px]:flex-col"
+    class="flex h-dvh w-full overflow-hidden font-['Times_New_Roman',Times,serif] text-[12px] leading-normal max-[450px]:flex-col"
   >
-    <!-- Left: gray; Contact 1/4, Events 1/4, Work 1/2. ≤350px: top pane (scrolls); white H1 strip pinned below. -->
+    <!-- Gray lists. ≤450px: under white stage (order-2), fills remaining height and scrolls. -->
     <div
-      class="flex h-full min-h-0 w-1/2 flex-col bg-neutral-200 max-[450px]:w-full max-[350px]:h-auto max-[350px]:min-h-0 max-[350px]:flex-1"
+      class="flex h-full min-h-0 w-1/2 flex-col bg-neutral-200 max-[450px]:order-2 max-[450px]:h-auto max-[450px]:min-h-0 max-[450px]:w-full max-[450px]:flex-1"
     >
       <section
         class="flex min-h-0 flex-[1_1_0%] flex-col overflow-hidden border-b border-black p-4"
@@ -908,13 +944,14 @@ onUnmounted(() => {
       </section>
     </div>
 
-    <!-- Right: white stage. Icons are decorative play only. ≤350px: H1-only strip pinned to bottom. -->
+    <!-- White stage. ≤450px: on top (order-1), ~half viewport, H1↔icon marquee (no drag). -->
     <div
-      class="relative h-full w-1/2 overflow-hidden bg-white p-4 max-[350px]:h-auto max-[350px]:w-full max-[350px]:shrink-0 max-[350px]:grow-0"
+      class="relative h-full w-1/2 overflow-hidden bg-white p-4 max-[450px]:order-1 max-[450px]:h-1/2 max-[450px]:w-full max-[450px]:shrink-0"
     >
+      <!-- Desktop / tablet: draggable icons + corner H1 -->
       <div
         ref="stageRef"
-        class="relative h-full w-full overflow-hidden max-[350px]:h-auto"
+        class="relative h-full w-full overflow-hidden max-[450px]:hidden"
         :class="isDragging ? 'select-none' : ''"
       >
         <!-- Decorative: pointer drag is optional play; not required to use the site -->
@@ -925,7 +962,7 @@ onUnmounted(() => {
           alt=""
           aria-hidden="true"
           :style="helperStyle(helper)"
-          class="absolute top-0 left-0 block touch-none select-none max-[350px]:hidden"
+          class="absolute top-0 left-0 block touch-none select-none"
           :class="
             drag?.id === helper.id ? 'cursor-grabbing' : 'cursor-grab'
           "
@@ -937,10 +974,46 @@ onUnmounted(() => {
         />
 
         <h1
-          class="absolute right-0 bottom-0 z-50 m-0 text-right font-['Times_New_Roman',Times,serif] text-[48px] leading-none max-[450px]:text-[32px] max-[350px]:static"
+          class="absolute right-0 bottom-0 z-50 m-0 text-right font-['Times_New_Roman',Times,serif] text-[48px] leading-none"
         >
-          Sarah Fensom
+          {{ SITE_TITLE }}
         </h1>
+      </div>
+
+      <!-- ≤450px: one SR title + decorative marquee (duplicates aria-hidden) -->
+      <div class="hidden h-full w-full max-[450px]:flex max-[450px]:flex-col">
+        <h1 class="sr-only">{{ SITE_TITLE }}</h1>
+        <div
+          class="flex min-h-0 flex-1 items-center overflow-hidden"
+          aria-hidden="true"
+        >
+          <div class="marquee-track flex w-max items-center gap-6">
+            <template v-for="copy in 2" :key="'marquee-copy-' + copy">
+              <template
+                v-for="item in marqueeItems"
+                :key="`copy-${copy}-${item.key}`"
+              >
+                <span
+                  v-if="item.type === 'h1'"
+                  class="shrink-0 font-['Times_New_Roman',Times,serif] text-[32px] leading-none whitespace-nowrap"
+                >
+                  {{ SITE_TITLE }}
+                </span>
+                <img
+                  v-else
+                  :src="item.helper.src"
+                  alt=""
+                  class="block shrink-0 select-none"
+                  :style="{
+                    width: `${displayWidth(item.helper)}px`,
+                    height: `${displayHeight(item.helper)}px`,
+                  }"
+                  draggable="false"
+                />
+              </template>
+            </template>
+          </div>
+        </div>
       </div>
     </div>
   </main>
