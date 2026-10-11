@@ -1,0 +1,3 @@
+This marker means main is serving the pre-launch placeholder.
+The birthday-launch workflow removes it by restoring branch launch-ready.
+Do not delete manually unless you intend to cancel the automatic launch.

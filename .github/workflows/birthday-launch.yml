@@ -1,0 +1,135 @@
+name: Birthday launch
+
+# ---------------------------------------------------------------------------
+# Timezone math (launch instant)
+# ---------------------------------------------------------------------------
+# Target: November 1, 2026, 5:00 AM America/Los_Angeles
+#
+# Pacific Daylight Time (PDT, UTC-7) ends that morning at 2:00 AM local,
+# when clocks fall back to 1:00 AM Pacific Standard Time (PST, UTC-8).
+# So 5:00 AM on Nov 1, 2026 in Los Angeles is PST → UTC-8 → 13:00 UTC.
+#
+# GitHub Actions `schedule` cron is always interpreted in UTC and has no
+# year field. Cron below is: minute 0, hour 13, day-of-month 1, month 11,
+# any day-of-week → every November 1 at 13:00 UTC (2025, 2026, 2027, …).
+#
+# Guards in the job:
+#   1. Skip unless .birthday-placeholder exists on main (idempotent).
+#   2. For schedule / non-force dispatch: skip until 2026-11-01 13:00:00 UTC.
+#   3. Restoring launch-ready removes the marker, so later Nov 1 runs no-op.
+# ---------------------------------------------------------------------------
+
+on:
+  schedule:
+    # Every Nov 1 at 13:00 UTC (= 5:00 AM PST after DST ends that morning)
+    - cron: "0 13 1 11 *"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Restore launch-ready onto main now (bypass datetime check; for testing)"
+        type: boolean
+        default: false
+
+# Required: Settings → Actions → General → Workflow permissions →
+# "Read and write permissions" (so GITHUB_TOKEN can push to main).
+# Also allow GitHub Actions to create/approve PRs is NOT required here.
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: birthday-launch
+  cancel-in-progress: false
+
+jobs:
+  launch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          # Persist credentials so we can push with GITHUB_TOKEN
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Idempotency — already launched?
+        id: guard
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          FORCE_INPUT: ${{ inputs.force }}
+        run: |
+          set -euo pipefail
+          if [ ! -f .birthday-placeholder ]; then
+            echo "No .birthday-placeholder on main — already launched or never set up. Skipping."
+            echo "should_launch=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          LAUNCH_UTC="2026-11-01T13:00:00Z"
+          LAUNCH_EPOCH=$(date -u -d "$LAUNCH_UTC" +%s)
+          NOW_EPOCH=$(date -u +%s)
+          FORCE="false"
+          if [ "$EVENT_NAME" = "workflow_dispatch" ] && [ "$FORCE_INPUT" = "true" ]; then
+            FORCE="true"
+          fi
+
+          echo "Now (UTC):     $(date -u -d "@$NOW_EPOCH" -Iseconds)"
+          echo "Launch (UTC):  $LAUNCH_UTC"
+          echo "Event:         $EVENT_NAME"
+          echo "Force:         $FORCE"
+
+          if [ "$FORCE" = "true" ]; then
+            echo "Force requested — proceeding."
+            echo "should_launch=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ "$NOW_EPOCH" -lt "$LAUNCH_EPOCH" ]; then
+            echo "Before launch instant — skipping (use workflow_dispatch with force=true to test)."
+            echo "should_launch=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "Launch instant reached — proceeding."
+          echo "should_launch=true" >> "$GITHUB_OUTPUT"
+
+      - name: Restore site from launch-ready
+        if: steps.guard.outputs.should_launch == 'true'
+        run: |
+          set -euo pipefail
+          git fetch origin launch-ready
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # Replace the entire tree with launch-ready (clean swap; no merge conflict soup).
+          git rm -rfq .
+          git checkout origin/launch-ready -- .
+          git add -A
+
+          if git diff --cached --quiet; then
+            echo "Working tree already matches launch-ready after restore — nothing to commit."
+            exit 0
+          fi
+
+          git commit -m "$(cat <<'EOF'
+          chore: birthday launch — restore full site from launch-ready
+
+          Switches GitHub Pages from the pre-launch placeholder to the real
+          site stored on branch launch-ready (sarahfensom.com / custom domain).
+          EOF
+          )"
+
+          git push origin HEAD:main
+
+      - name: Trigger Pages deploy
+        if: steps.guard.outputs.should_launch == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          # Pushes that use GITHUB_TOKEN do not trigger other workflows on push.
+          # workflow_dispatch is allowed — kick deploy-pages on the restored main.
+          # Prefer the workflow file that exists after restore (Vite build).
+          gh workflow run deploy-pages.yml --ref main
+          echo "Dispatched deploy-pages.yml on main."

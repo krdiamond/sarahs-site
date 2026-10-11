@@ -1,5 +1,9 @@
 name: Deploy to GitHub Pages
 
+# Placeholder period: deploy static files from main (no npm build).
+# After birthday-launch restores launch-ready, that branch's deploy-pages.yml
+# (Vite build → dist) replaces this file automatically.
+
 on:
   push:
     branches: [main]
@@ -19,15 +23,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm install
-      - run: npm run build
+      - name: Stage static site
+        run: |
+          mkdir -p _site
+          cp index.html _site/
+          if [ -f CNAME ]; then cp CNAME _site/; fi
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: dist
+          path: _site
 
   deploy:
     needs: build
