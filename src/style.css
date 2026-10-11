@@ -27,8 +27,11 @@ a:focus-visible {
 }
 
 /*
-  ≤450px marquee: two identical .marquee-group halves; translate -50% with
-  linear infinite. Motion is CSS-only (duration via --marquee-duration).
+  ≤450px marquee — CSS/HTML only for motion.
+  Structure: .marquee-viewport > .marquee-track > (.marquee-group × 2)
+  Both groups are identical width; track animates exactly -50% of itself.
+  Trailing margin on each item equals the inter-item gap so the seam between
+  copy1→copy2 matches copy2→copy1 when the loop restarts.
 */
 @keyframes marquee-scroll {
   from {
@@ -39,27 +42,29 @@ a:focus-visible {
   }
 }
 
+.marquee-viewport {
+  width: 100%;
+}
+
 .marquee-track {
   display: flex;
   width: max-content;
-  will-change: transform;
+  animation: marquee-scroll var(--marquee-duration, 28s) linear infinite;
 }
 
 .marquee-group {
   display: flex;
-  flex-shrink: 0;
+  flex: 0 0 auto;
   align-items: center;
-  gap: 1.5rem;
-  /* Match internal gap so the seam between copies is identical */
-  padding-inline-end: 1.5rem;
 }
 
-.marquee-track--ready {
-  animation: marquee-scroll var(--marquee-duration, 28s) linear infinite;
+.marquee-item {
+  flex-shrink: 0;
+  margin-inline-end: 1.5rem;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .marquee-track--ready {
+  .marquee-track {
     animation: none;
   }
 }
