@@ -84,11 +84,18 @@
       <div
         class="relative h-full w-1/2 overflow-hidden bg-white p-4 max-[450px]:order-1 max-[450px]:h-[100px] max-[450px]:w-full max-[450px]:shrink-0 max-[450px]:p-0"
       >
-        <!-- Desktop / tablet: draggable icons + corner H1 -->
+        <!-- Desktop / tablet: draggable icons + corner H1 (chrome paints immediately) -->
         <div
           id="stage"
           class="relative h-full w-full overflow-hidden max-[450px]:hidden"
         >
+          <div
+            id="stage-loading"
+            class="stage-loading pointer-events-none absolute inset-0 z-10 flex items-center justify-center"
+            aria-hidden="true"
+          >
+            <span class="stage-loading__dot"></span>
+          </div>
           <h1
             class="absolute right-0 bottom-0 z-50 m-0 text-right font-['Times_New_Roman',Times,serif] text-[48px] leading-none"
           >
@@ -103,7 +110,15 @@
             id="marquee-host"
             class="marquee-viewport flex min-h-0 flex-1 items-center overflow-hidden"
             aria-hidden="true"
-          ></div>
+          >
+            <div
+              id="marquee-loading"
+              class="stage-loading pointer-events-none flex h-full w-full items-center justify-center"
+              aria-hidden="true"
+            >
+              <span class="stage-loading__dot"></span>
+            </div>
+          </div>
         </div>
       </div>
     </main>

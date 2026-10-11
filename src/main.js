@@ -3,6 +3,9 @@ import JSZip from 'jszip'
 
 const SHEET_ID = '1PIcdiUt1_Yj9Mf1zErlEPObBl5Kg6W5Z3Qd5p54-WRE'
 const DEFAULT_ICON_WIDTH = 160
+/** Cap decoded source pixels (covers 160css @2x); shrinks huge sheet media for faster decode. */
+const MAX_ICON_SOURCE_PX = 320
+const MARQUEE_ICON_HEIGHT = 80
 const MOBILE_MQ = '(max-width: 767px)'
 const NARROW_MQ = '(max-width: 450px)'
 const SITE_TITLE = 'Sarah Fensom'
@@ -11,6 +14,12 @@ const MARQUEE_BASE_SECONDS = 28
 const EVENTS_ERROR_MSG = 'Couldn’t load events — try refreshing'
 const WORK_ERROR_MSG = 'Couldn’t load works — try refreshing'
 const CONTACT_ERROR_MSG = 'Couldn’t load contact — try refreshing'
+
+const perfMark = (label, t0) => {
+  const ms = performance.now() - t0
+  console.info(`[perf] ${label}: ${ms.toFixed(0)}ms`)
+  return ms
+}
 
 const INSTAGRAM_PATH =
   'M7 2h10a5 5 0 0 1 5 5v10a5 5 0 0 1-5 5H7a5 5 0 0 1-5-5V7a5 5 0 0 1 5-5zm0 2a3 3 0 0 0-3 3v10a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3V7a3 3 0 0 0-3-3H7zm5 3.5A4.5 4.5 0 1 1 7.5 12 4.5 4.5 0 0 1 12 7.5zm0 2A2.5 2.5 0 1 0 14.5 12 2.5 2.5 0 0 0 12 9.5zM17.75 6a1.25 1.25 0 1 1-1.25 1.25A1.25 1.25 0 0 1 17.75 6z'
@@ -40,6 +49,32 @@ const sheetCsvUrl = (sheetName, { headers, tq } = {}) => {
 const sheetXlsxUrl = () =>
   `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=xlsx`
 
+/** Session-cached workbook: one network fetch shared by Icons + Favicon. */
+let workbookPromise = null
+/** @type {import('jszip') | null} */
+let workbookZip = null
+/** @type {ArrayBuffer | null} */
+let workbookBuffer = null
+
+const getWorkbookZip = () => {
+  if (!workbookPromise) {
+    workbookPromise = (async () => {
+      const t0 = performance.now()
+      const response = await fetch(sheetXlsxUrl())
+      if (!response.ok) throw new Error('Failed to load workbook')
+      const buffer = await response.arrayBuffer()
+      workbookBuffer = buffer
+      const zip = await JSZip.loadAsync(buffer)
+      workbookZip = zip
+      console.info(
+        `[perf] xlsx fetch+parse: ${(performance.now() - t0).toFixed(0)}ms, ${buffer.byteLength} bytes (single shared fetch)`,
+      )
+      return zip
+    })()
+  }
+  return workbookPromise
+}
+
 /** @type {Array<{date: string, title: string, credit: string, url: string}>} */
 let events = []
 /** @type {Array<{date: string, title: string, credit: string, url: string}>} */
@@ -64,9 +99,21 @@ let narrowMq = null
 let stageEl = null
 /** @type {HTMLElement | null} */
 let marqueeHostEl = null
+/** @type {HTMLElement | null} */
+let stageLoadingEl = null
+/** @type {HTMLElement | null} */
+let marqueeLoadingEl = null
 /** @type {{ id: string, offsetX: number, offsetY: number } | null} */
 let drag = null
 let zCounter = 1
+const initStartedAt = performance.now()
+
+const setDesktopLoading = (visible) => {
+  stageLoadingEl?.classList.toggle('hidden', !visible)
+}
+const setMarqueeLoading = (visible) => {
+  marqueeLoadingEl?.classList.toggle('hidden', !visible)
+}
 
 const contactEmailDisplay = () =>
   (contact.email || '').replace(/^mailto:/i, '').trim()
@@ -133,28 +180,34 @@ const buildMarqueeGroup = (items) => {
 
 /**
  * One-shot imperative mount. Sets --marquee-duration once; CSS owns motion.
+ * Uses pre-decoded helper sizes — never remounts / never updates mid-loop.
  */
 const prepareMarqueeOnce = async () => {
   if (marqueeIslandBuilt) return
   const host = marqueeHostEl
   if (!host) return
   marqueeIslandBuilt = true
+  const t0 = performance.now()
 
   try {
     const icons = helpers
-    const decoded = await Promise.all(
-      icons.map(async (helper) => {
-        const img = await loadDecodedImage(helper.src)
-        const naturalW = img.naturalWidth || helper.baseWidth || 80
-        const naturalH = img.naturalHeight || helper.baseHeight || 80
-        const height = 80
-        const width = Math.max(
+    const decoded = icons.map((helper) => ({
+      type: 'icon',
+      src: helper.src,
+      width:
+        helper.marqueeWidth ||
+        Math.max(
           1,
-          Math.round((height * naturalW) / Math.max(1, naturalH)),
-        )
-        return { type: 'icon', src: helper.src, width, height }
-      }),
-    )
+          Math.round(
+            (MARQUEE_ICON_HEIGHT * (helper.naturalWidth || helper.baseWidth)) /
+              Math.max(1, helper.naturalHeight || helper.baseHeight || 1),
+          ),
+        ),
+      height: helper.marqueeHeight || MARQUEE_ICON_HEIGHT,
+    }))
+
+    // Ensure bitmaps are in the decoder cache before CSS animation starts.
+    await Promise.all(decoded.map((item) => loadDecodedImage(item.src)))
 
     const items = []
     if (!decoded.length) {
@@ -177,6 +230,12 @@ const prepareMarqueeOnce = async () => {
     track.appendChild(buildMarqueeGroup(items))
 
     host.replaceChildren(track)
+    setMarqueeLoading(false)
+    setDesktopLoading(false)
+    perfMark('marquee mount (from prepareMarqueeOnce start)', t0)
+    console.info(
+      `[perf] time-to-marquee-start (from page init): ${(performance.now() - initStartedAt).toFixed(0)}ms`,
+    )
   } catch (error) {
     console.error(error)
     const track = document.createElement('div')
@@ -185,6 +244,8 @@ const prepareMarqueeOnce = async () => {
     track.appendChild(buildMarqueeGroup([{ type: 'h1' }]))
     track.appendChild(buildMarqueeGroup([{ type: 'h1' }]))
     host.replaceChildren(track)
+    setMarqueeLoading(false)
+    setDesktopLoading(false)
   }
 }
 
@@ -754,11 +815,69 @@ const fetchFaviconSheetGlyph = async () => {
   return ''
 }
 
+const mimeFromPath = (path, fallback = 'image/png') => {
+  if (path.endsWith('.png')) return 'image/png'
+  if (path.endsWith('.jpg') || path.endsWith('.jpeg')) return 'image/jpeg'
+  if (path.endsWith('.webp')) return 'image/webp'
+  if (path.endsWith('.gif')) return 'image/gif'
+  return fallback
+}
+
+/**
+ * Decode sheet media; downscale huge sources so stage/marquee decode stays cheap.
+ * Returns object URL + natural size of the (possibly resized) bitmap.
+ */
+const prepareDisplayImage = async (blob, type) => {
+  const rawUrl = URL.createObjectURL(new Blob([blob], { type }))
+  try {
+    const img = await loadDecodedImage(rawUrl)
+    const nw = img.naturalWidth || DEFAULT_ICON_WIDTH
+    const nh = img.naturalHeight || DEFAULT_ICON_WIDTH
+    const maxSide = Math.max(nw, nh)
+
+    if (maxSide <= MAX_ICON_SOURCE_PX) {
+      objectUrls.push(rawUrl)
+      return { src: rawUrl, naturalWidth: nw, naturalHeight: nh }
+    }
+
+    const scale = MAX_ICON_SOURCE_PX / maxSide
+    const w = Math.max(1, Math.round(nw * scale))
+    const h = Math.max(1, Math.round(nh * scale))
+    const canvas = document.createElement('canvas')
+    canvas.width = w
+    canvas.height = h
+    const ctx = canvas.getContext('2d')
+    ctx.imageSmoothingEnabled = true
+    ctx.imageSmoothingQuality = 'high'
+    ctx.drawImage(img, 0, 0, w, h)
+    URL.revokeObjectURL(rawUrl)
+
+    const outBlob = await new Promise((resolve) => {
+      canvas.toBlob(
+        (webpBlob) => {
+          if (webpBlob) resolve(webpBlob)
+          else canvas.toBlob((pngBlob) => resolve(pngBlob), 'image/png')
+        },
+        'image/webp',
+        0.86,
+      )
+    })
+    if (!outBlob) {
+      const dataUrl = canvas.toDataURL('image/png')
+      return { src: dataUrl, naturalWidth: w, naturalHeight: h }
+    }
+    const outUrl = URL.createObjectURL(outBlob)
+    objectUrls.push(outUrl)
+    return { src: outUrl, naturalWidth: w, naturalHeight: h }
+  } catch (error) {
+    URL.revokeObjectURL(rawUrl)
+    throw error
+  }
+}
+
 const loadFaviconFromSheet = async () => {
   try {
-    const response = await fetch(sheetXlsxUrl())
-    if (!response.ok) throw new Error('Failed to load workbook for favicon')
-    const zip = await JSZip.loadAsync(await response.arrayBuffer())
+    const zip = await getWorkbookZip()
     const sheetPath = await findSheetPath(zip, 'Favicon')
     const drawingPath = await findDrawingPath(zip, sheetPath)
     let imagePaths = drawingPath
@@ -770,14 +889,7 @@ const loadFaviconFromSheet = async () => {
       const file = zip.file(path)
       if (file) {
         const blob = await file.async('blob')
-        const type =
-          path.endsWith('.png')
-            ? 'image/png'
-            : path.endsWith('.jpg') || path.endsWith('.jpeg')
-              ? 'image/jpeg'
-              : path.endsWith('.webp')
-                ? 'image/webp'
-                : blob.type || 'image/png'
+        const type = mimeFromPath(path, blob.type || 'image/png')
         const url = URL.createObjectURL(new Blob([blob], { type }))
         objectUrls.push(url)
         const dataUrl = await prepareFaviconFromImageSrc(url, 128)
@@ -1000,6 +1112,25 @@ const onPointerUp = () => {
   setDraggingUi(false)
 }
 
+const createStageIconEl = (helper) => {
+  const img = document.createElement('img')
+  img.src = helper.src
+  img.alt = ''
+  img.setAttribute('aria-hidden', 'true')
+  img.draggable = false
+  img.dataset.stageIcon = helper.id
+  img.className =
+    'absolute top-0 left-0 block touch-none select-none cursor-grab'
+  helper.el = img
+  applyHelperStyle(helper)
+
+  img.addEventListener('pointerdown', (event) => onPointerDown(event, helper))
+  img.addEventListener('pointermove', onPointerMove)
+  img.addEventListener('pointerup', onPointerUp)
+  img.addEventListener('pointercancel', onPointerUp)
+  return img
+}
+
 const mountStageIcons = () => {
   const stage = stageEl
   if (!stage) return
@@ -1011,31 +1142,69 @@ const mountStageIcons = () => {
 
   const h1 = stage.querySelector('h1')
   for (const helper of helpers) {
-    const img = document.createElement('img')
-    img.src = helper.src
-    img.alt = ''
-    img.setAttribute('aria-hidden', 'true')
-    img.draggable = false
-    img.dataset.stageIcon = helper.id
-    img.className =
-      'absolute top-0 left-0 block touch-none select-none cursor-grab'
-    helper.el = img
-    applyHelperStyle(helper)
-
-    img.addEventListener('pointerdown', (event) => onPointerDown(event, helper))
-    img.addEventListener('pointermove', onPointerMove)
-    img.addEventListener('pointerup', onPointerUp)
-    img.addEventListener('pointercancel', onPointerUp)
-
+    const img = createStageIconEl(helper)
     if (h1) stage.insertBefore(img, h1)
     else stage.appendChild(img)
   }
 }
 
+/** Progressive: add icons that are not yet on the stage without wiping existing ones. */
+const ensureStageIconsMounted = () => {
+  const stage = stageEl
+  if (!stage || isNarrow) return
+  const h1 = stage.querySelector('h1')
+  for (const helper of helpers) {
+    if (helper.el && stage.contains(helper.el)) {
+      applyHelperStyle(helper)
+      continue
+    }
+    const img = createStageIconEl(helper)
+    if (h1) stage.insertBefore(img, h1)
+    else stage.appendChild(img)
+  }
+}
+
+const buildHelperFromMedia = async (zip, path, index) => {
+  const file = zip.file(path)
+  if (!file) return null
+  const blob = await file.async('blob')
+  const type = mimeFromPath(path, blob.type || 'image/png')
+  const prepared = await prepareDisplayImage(blob, type)
+  const baseWidth = DEFAULT_ICON_WIDTH
+  const baseHeight =
+    Math.round(
+      (baseWidth * prepared.naturalHeight) / Math.max(1, prepared.naturalWidth),
+    ) || baseWidth
+  const marqueeHeight = MARQUEE_ICON_HEIGHT
+  const marqueeWidth = Math.max(
+    1,
+    Math.round(
+      (marqueeHeight * prepared.naturalWidth) /
+        Math.max(1, prepared.naturalHeight),
+    ),
+  )
+  return {
+    id: `icon-${index}-${path.split('/').pop()}`,
+    src: prepared.src,
+    naturalWidth: prepared.naturalWidth,
+    naturalHeight: prepared.naturalHeight,
+    marqueeWidth,
+    marqueeHeight,
+    baseWidth,
+    baseHeight,
+    width: Math.round(baseWidth * iconScale()),
+    height: Math.round(baseHeight * iconScale()),
+    x: 0,
+    y: 0,
+    isPrimary: index === 0,
+    z: 1,
+    el: null,
+  }
+}
+
 const loadIconsFromSheet = async () => {
-  const response = await fetch(sheetXlsxUrl())
-  if (!response.ok) throw new Error('Failed to load Icons workbook')
-  const zip = await JSZip.loadAsync(await response.arrayBuffer())
+  const t0 = performance.now()
+  const zip = await getWorkbookZip()
 
   const sheetPath = await findIconsSheetPath(zip)
   const drawingPath = await findDrawingPath(zip, sheetPath)
@@ -1049,49 +1218,41 @@ const loadIconsFromSheet = async () => {
       .sort()
   }
 
-  const loaded = []
-  for (let i = 0; i < imagePaths.length; i += 1) {
-    const path = imagePaths[i]
-    const file = zip.file(path)
-    if (!file) continue
-    const blob = await file.async('blob')
-    const type =
-      path.endsWith('.png')
-        ? 'image/png'
-        : path.endsWith('.jpg') || path.endsWith('.jpeg')
-          ? 'image/jpeg'
-          : path.endsWith('.webp')
-            ? 'image/webp'
-            : blob.type || 'image/png'
-    const url = URL.createObjectURL(new Blob([blob], { type }))
-    objectUrls.push(url)
-    const natural = await loadImageNaturalSize(url)
-    const baseWidth = DEFAULT_ICON_WIDTH
-    const baseHeight =
-      Math.round((baseWidth * natural.height) / natural.width) || baseWidth
-    loaded.push({
-      id: `icon-${i}-${path.split('/').pop()}`,
-      src: url,
-      baseWidth,
-      baseHeight,
-      width: Math.round(baseWidth * iconScale()),
-      height: Math.round(baseHeight * iconScale()),
-      x: 0,
-      y: 0,
-      isPrimary: i === 0,
-      z: 1,
-      el: null,
-    })
+  if (!imagePaths.length) {
+    helpers = []
+    setDesktopLoading(false)
+    return
   }
 
+  // Kick all extractions in parallel; surface the primary icon as soon as it lands.
+  const tasks = imagePaths.map((path, i) => buildHelperFromMedia(zip, path, i))
+  const firstHelper = await tasks[0]
+  if (firstHelper) {
+    helpers = [firstHelper]
+    ensureStageIconsMounted()
+    placeHelpersInitially()
+    setDesktopLoading(false)
+    console.info(
+      `[perf] time-to-first-icon (from page init): ${(performance.now() - initStartedAt).toFixed(0)}ms`,
+    )
+    perfMark('first icon ready (from loadIcons start)', t0)
+  }
+
+  const rest = await Promise.all(tasks.slice(1))
+  const loaded = [firstHelper, ...rest].filter(Boolean)
   helpers = loaded
-  mountStageIcons()
+  ensureStageIconsMounted()
   placeHelpersInitially()
+  perfMark('all icons ready (from loadIcons start)', t0)
 }
 
 const init = async () => {
   stageEl = document.getElementById('stage')
   marqueeHostEl = document.getElementById('marquee-host')
+  stageLoadingEl = document.getElementById('stage-loading')
+  marqueeLoadingEl = document.getElementById('marquee-loading')
+  setDesktopLoading(true)
+  setMarqueeLoading(true)
 
   mobileMq = window.matchMedia(MOBILE_MQ)
   isMobile = mobileMq.matches
@@ -1101,13 +1262,25 @@ const init = async () => {
   narrowMq.addEventListener('change', onNarrowChange)
   window.addEventListener('resize', onStageLayoutChange)
 
+  // Warm the shared xlsx immediately alongside CSV lists (no sequential waterfall).
+  const workbookWarm = getWorkbookZip().catch((error) => {
+    console.error(error)
+    return null
+  })
+  const listsP = loadLists()
+  const iconsP = loadIconsFromSheet()
+  // Favicon shares the workbook; never gate stage/marquee on it.
+  const faviconP = loadFaviconFromSheet()
+
   try {
-    await Promise.all([loadLists(), loadIconsFromSheet(), loadFaviconFromSheet()])
+    await Promise.all([listsP, iconsP, workbookWarm])
   } catch (error) {
     console.error(error)
   }
-  // Mount marquee only after sheet data is settled so CSS animation never restarts.
+
+  // Mount marquee once after Contact + icons settle (favicon may still be in flight).
   await prepareMarqueeOnce()
+  faviconP.catch((error) => console.error(error))
 }
 
 init()
