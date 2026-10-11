@@ -89,10 +89,13 @@ const objectUrls = []
 let isMobile = false
 let isNarrow = false
 /**
- * ≤450px marquee is a pure HTML/CSS island: createElement once into a stable
- * host, then never touch that DOM again.
+ * ≤450px marquee phases:
+ * - none → text (H1-only, immediate)
+ * - text → full (H1↔icons, single upgrade when icons ready)
+ * After `full`, never remount mid-loop.
  */
-let marqueeIslandBuilt = false
+/** @type {'none' | 'text' | 'full'} */
+let marqueePhase = 'none'
 let mobileMq = null
 let narrowMq = null
 /** @type {HTMLElement | null} */
@@ -101,8 +104,6 @@ let stageEl = null
 let marqueeHostEl = null
 /** @type {HTMLElement | null} */
 let stageLoadingEl = null
-/** @type {HTMLElement | null} */
-let marqueeLoadingEl = null
 /** @type {{ id: string, offsetX: number, offsetY: number } | null} */
 let drag = null
 let zCounter = 1
@@ -111,8 +112,16 @@ const initStartedAt = performance.now()
 const setDesktopLoading = (visible) => {
   stageLoadingEl?.classList.toggle('hidden', !visible)
 }
-const setMarqueeLoading = (visible) => {
-  marqueeLoadingEl?.classList.toggle('hidden', !visible)
+
+const marqueeDurationSeconds = () => {
+  const speed = contact.marqueeSpeed
+  const safe = Number.isFinite(speed) && speed > 0 ? speed : 1
+  return MARQUEE_BASE_SECONDS / safe
+}
+
+const marqueeLabel = () => {
+  const name = (contact.name || '').trim()
+  return name || SITE_TITLE
 }
 
 const contactEmailDisplay = () =>
@@ -154,8 +163,10 @@ const loadDecodedImage = async (src) => {
 const appendMarqueeItem = (group, item) => {
   if (item.type === 'h1') {
     const span = document.createElement('span')
-    span.className = 'marquee-item'
-    span.textContent = SITE_TITLE
+    span.className = item.spaced
+      ? 'marquee-item marquee-item--spaced'
+      : 'marquee-item'
+    span.textContent = item.text || marqueeLabel()
     group.appendChild(span)
     return
   }
@@ -178,19 +189,54 @@ const buildMarqueeGroup = (items) => {
   return group
 }
 
-/**
- * One-shot imperative mount. Sets --marquee-duration once; CSS owns motion.
- * Uses pre-decoded helper sizes — never remounts / never updates mid-loop.
- */
-const prepareMarqueeOnce = async () => {
-  if (marqueeIslandBuilt) return
+const replaceMarqueeTrack = (items, durationSeconds) => {
   const host = marqueeHostEl
   if (!host) return
-  marqueeIslandBuilt = true
+  const track = document.createElement('div')
+  track.className = 'marquee-track'
+  track.style.setProperty('--marquee-duration', `${durationSeconds}s`)
+  track.appendChild(buildMarqueeGroup(items))
+  track.appendChild(buildMarqueeGroup(items))
+  host.replaceChildren(track)
+}
+
+/** Immediate H1-only marquee so ≤450px never looks blank while icons load. */
+const mountTextMarquee = () => {
+  if (marqueePhase === 'full') return
+  const label = marqueeLabel()
+  // Several spaced H1s per group → comfortable gaps in the seamless -50% loop.
+  const items = [
+    { type: 'h1', spaced: true, text: label },
+    { type: 'h1', spaced: true, text: label },
+    { type: 'h1', spaced: true, text: label },
+    { type: 'h1', spaced: true, text: label },
+  ]
+  replaceMarqueeTrack(items, marqueeDurationSeconds())
+  marqueePhase = 'text'
+  console.info(
+    `[perf] text marquee mounted (from page init): ${(performance.now() - initStartedAt).toFixed(0)}ms`,
+  )
+}
+
+/**
+ * Single upgrade to H1↔icon sequence. After this, CSS owns motion — no remounts.
+ */
+const mountFullMarquee = async () => {
+  if (marqueePhase === 'full') return
+  const host = marqueeHostEl
+  if (!host) return
   const t0 = performance.now()
 
   try {
     const icons = helpers
+    if (!icons.length) {
+      // No icons: lock text marquee (refresh label/speed once) and stop.
+      mountTextMarquee()
+      marqueePhase = 'full'
+      setDesktopLoading(false)
+      return
+    }
+
     const decoded = icons.map((helper) => ({
       type: 'icon',
       src: helper.src,
@@ -208,43 +254,29 @@ const prepareMarqueeOnce = async () => {
 
     // Ensure bitmaps are in the decoder cache before CSS animation starts.
     await Promise.all(decoded.map((item) => loadDecodedImage(item.src)))
+    // Abort if something else already finalized (shouldn't happen).
+    if (marqueePhase === 'full') return
 
+    const label = marqueeLabel()
     const items = []
-    if (!decoded.length) {
-      items.push({ type: 'h1' })
-    } else {
-      for (const icon of decoded) {
-        items.push({ type: 'h1' })
-        items.push(icon)
-      }
+    for (const icon of decoded) {
+      items.push({ type: 'h1', text: label })
+      items.push(icon)
     }
 
-    const speed = contact.marqueeSpeed
-    const safe = Number.isFinite(speed) && speed > 0 ? speed : 1
-    const duration = MARQUEE_BASE_SECONDS / safe
-
-    const track = document.createElement('div')
-    track.className = 'marquee-track'
-    track.style.setProperty('--marquee-duration', `${duration}s`)
-    track.appendChild(buildMarqueeGroup(items))
-    track.appendChild(buildMarqueeGroup(items))
-
-    host.replaceChildren(track)
-    setMarqueeLoading(false)
+    replaceMarqueeTrack(items, marqueeDurationSeconds())
+    marqueePhase = 'full'
     setDesktopLoading(false)
-    perfMark('marquee mount (from prepareMarqueeOnce start)', t0)
+    perfMark('full marquee mount', t0)
     console.info(
-      `[perf] time-to-marquee-start (from page init): ${(performance.now() - initStartedAt).toFixed(0)}ms`,
+      `[perf] time-to-full-marquee (from page init): ${(performance.now() - initStartedAt).toFixed(0)}ms`,
     )
   } catch (error) {
     console.error(error)
-    const track = document.createElement('div')
-    track.className = 'marquee-track'
-    track.style.setProperty('--marquee-duration', `${MARQUEE_BASE_SECONDS}s`)
-    track.appendChild(buildMarqueeGroup([{ type: 'h1' }]))
-    track.appendChild(buildMarqueeGroup([{ type: 'h1' }]))
-    host.replaceChildren(track)
-    setMarqueeLoading(false)
+    if (marqueePhase !== 'full') {
+      mountTextMarquee()
+      marqueePhase = 'full'
+    }
     setDesktopLoading(false)
   }
 }
@@ -1045,15 +1077,37 @@ const onMobileChange = () => {
   if (!isNarrow) onStageLayoutChange()
 }
 
+const restoreDesktopStageIcons = () => {
+  if (isNarrow) return
+  if (!helpers.length) {
+    setDesktopLoading(false)
+    return
+  }
+  // Icons may never have been mounted if they loaded while ≤450px (ensureStage
+  // skips in narrow mode). Remount + place after the stage is visible again.
+  mountStageIcons()
+  placeHelpersInitially()
+  setDesktopLoading(false)
+}
+
 const onNarrowChange = () => {
+  const wasNarrow = isNarrow
   isNarrow = narrowMq?.matches ?? false
   if (isNarrow) {
     drag = null
     stageEl?.classList.remove('select-none')
     return
   }
+  if (!wasNarrow) {
+    // Already desktop; resize within desktop is handled by onStageLayoutChange.
+    return
+  }
+  // Leaving marquee mode: wait two frames so max-[450px]:hidden lifts and
+  // the stage has a real clientWidth/Height before placement.
   requestAnimationFrame(() => {
-    placeHelpersInitially()
+    requestAnimationFrame(() => {
+      restoreDesktopStageIcons()
+    })
   })
 }
 
@@ -1250,9 +1304,7 @@ const init = async () => {
   stageEl = document.getElementById('stage')
   marqueeHostEl = document.getElementById('marquee-host')
   stageLoadingEl = document.getElementById('stage-loading')
-  marqueeLoadingEl = document.getElementById('marquee-loading')
   setDesktopLoading(true)
-  setMarqueeLoading(true)
 
   mobileMq = window.matchMedia(MOBILE_MQ)
   isMobile = mobileMq.matches
@@ -1261,6 +1313,9 @@ const init = async () => {
   isNarrow = narrowMq.matches
   narrowMq.addEventListener('change', onNarrowChange)
   window.addEventListener('resize', onStageLayoutChange)
+
+  // ≤450px: H1-only marquee immediately (no blank white stage while xlsx loads).
+  mountTextMarquee()
 
   // Warm the shared xlsx immediately alongside CSV lists (no sequential waterfall).
   const workbookWarm = getWorkbookZip().catch((error) => {
@@ -1278,8 +1333,8 @@ const init = async () => {
     console.error(error)
   }
 
-  // Mount marquee once after Contact + icons settle (favicon may still be in flight).
-  await prepareMarqueeOnce()
+  // Single upgrade: text-only → H1↔icon (then freeze; CSS owns the loop).
+  await mountFullMarquee()
   faviconP.catch((error) => console.error(error))
 }
 

@@ -61,6 +61,11 @@ a:focus-visible {
   margin-inline-end: 1.5rem;
 }
 
+/* H1-only loading marquee: more air between repeated names */
+.marquee-item.marquee-item--spaced {
+  margin-inline-end: 3rem;
+}
+
 .marquee-group > span.marquee-item {
   font-family: 'Times New Roman', Times, serif;
   font-size: 32px;
